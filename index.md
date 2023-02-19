@@ -1,6 +1,6 @@
-![PyPI - Python Version](https://img.shields.io/pypi/pyversions/cvae-glrm) ![GitHub release (latest by date)](https://img.shields.io/github/v/release/az7jh2/CVAE-GLRM) ![PyPI](https://img.shields.io/pypi/v/cvae-glrm) ![Conda](https://img.shields.io/conda/v/bioconda/cvae-glrm) ![Docker Image Version (latest by date)](https://img.shields.io/docker/v/az7jh2/cvae-glrm?label=docker) ![Read the Docs (version)](https://img.shields.io/readthedocs/cvae-glrm/latest)
+[![PyPI - Python Version](https://img.shields.io/pypi/pyversions/cvae-glrm)](https://www.python.org/) [![GitHub release (latest by date)](https://img.shields.io/github/v/release/az7jh2/CVAE-GLRM)](https://github.com/az7jh2/CVAE-GLRM) [![PyPI](https://img.shields.io/pypi/v/cvae-glrm)](https://pypi.org/project/cvae-glrm/) ![Conda](https://img.shields.io/conda/v/bioconda/cvae-glrm) [![Docker Image Version (latest by date)](https://img.shields.io/docker/v/az7jh2/cvae-glrm?label=docker)](https://hub.docker.com/repository/docker/az7jh2/cvae-glrm/general) [![Read the Docs (version)](https://img.shields.io/readthedocs/cvae-glrm/latest)](https://cvae-glrm.readthedocs.io/en/latest/)
 
-![flowchart](Flowchart.png)
+![flowchart](https://github.com/az7jh2/CVAE-GLRM/blob/gh-pages/Flowchart.png)
 
 CVAE-GLRM is a two-step **hybrid** machine learning and regression method considering platform effect, spatial information and sparsity in **deconvolution** of spatial transcriptomic data using reference single-cell RNA sequencing data from same tissue type. CVAE-GLRM further supports **imputing cell type compositions and gene expression at enhanced resolution** by constructing random walk on the estimated cell type compositions.
 
