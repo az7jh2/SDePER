@@ -1,0 +1,15 @@
+numpy==1.22.4
+scipy==1.8.1
+pandas==1.4.3
+networkx==2.8.4
+matplotlib==3.5.2
+scikit-learn==1.1.1
+numba==0.55.2
+openpyxl==3.0.10
+tensorflow==2.9.1
+scanpy==1.9.1
+scikit-misc==0.1.4
+seaborn==0.11.2
+umap-learn==0.5.3
+distinctipy==1.2.2
+reportlab==3.6.12
