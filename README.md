@@ -1,2 +1,2 @@
-# CVAE-GLRM GitHub Pages
-This branch is use for generating GitHub Pages only.
+# SDePER GitHub Pages
+This branch is used for generating GitHub Pages only.
