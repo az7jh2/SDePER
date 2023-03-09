@@ -11,6 +11,7 @@ SDePER can be installed via `pip`
 
 ```bash
 conda create -n sdeper-env python=3.9.12
+conda activate sdeper-env
 pip install sdeper
 ```
 
