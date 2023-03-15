@@ -3,7 +3,7 @@
 
 ![flowchart](Flowchart.png)
 
-SDePER (**S**patial **De**convolution method with **P**latform **E**ffect **R**emoval) is a two-step **hybrid** machine learning and regression method considering platform effect, spatial information and sparsity in **deconvolution** of spatial transcriptomic data using reference single-cell RNA sequencing data from same tissue type.
+SDePER (**S**patial **De**convolution method with **P**latform **E**ffect **R**emoval) is a two-step **hybrid** machine learning and regression method considering platform effect, spatial information and sparsity in **deconvolution** of spatial transcriptomic data using reference single-cell RNA sequencing data from same tissue type. It's also able to **impute** cell type compositions and gene expression at **enhanced resolution**.
 
 ## Quick Start
 
