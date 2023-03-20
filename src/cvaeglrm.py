@@ -27,7 +27,7 @@ def main():
     warnings.filterwarnings("ignore")
     
     
-    print(f'\nCVAE-GLRM (Conditional Variational Autoencoder - Graph Laplacian Regularized stratified Model) v{cur_version}\n')
+    print(f'\nSDePER (Spatial Deconvolution method with Platform Effect Removal) v{cur_version}\n')
     
     
     import pandas as pd
@@ -51,7 +51,7 @@ def main():
     tf.compat.v1.keras.backend.set_session(sess)
     
     
-    print('\n\nPreprocessing...\n')
+    print('\n\n######### Preprocessing... #########\n')
     data = preprocess(paramdict['spatial_file'], paramdict['ref_file'], paramdict['ref_celltype_file'], paramdict['marker_file'], paramdict['A_file'], paramdict['use_cvae'], paramdict['n_hv_gene'], paramdict['n_marker_per_cmp'], paramdict['pseudo_spot_min_cell'], paramdict['pseudo_spot_max_cell'], paramdict['seq_depth_scaler'], paramdict['cvae_input_scaler'], paramdict['cvae_init_lr'], paramdict['redo_de'], paramdict['diagnosis'])
     
     
@@ -90,7 +90,7 @@ def main():
         output_file = os.path.join(output_path, 'celltype_proportions.csv')
         pd.DataFrame(result['theta'], index=data['spot_names'], columns=data['celltype_names']).to_csv(output_file)
         
-    print(f'\n\nCVAE-GLRM modeling finished. Estimate results saved in {output_file}. Elapsed time: {(time()-start_time)/3600.0:.2f} hours.\n\n')
+    print(f'\n\ncell type deconvolution finished. Estimate results saved in {output_file}. Elapsed time: {(time()-start_time)/3600.0:.2f} hours.')
     
     
     # imputation
@@ -98,7 +98,7 @@ def main():
         
         from imputation import generate_imputation_expression_map
         
-        print('start imputation!')
+        print('\n\n######### Start imputation #########')
         
         for x in paramdict['impute_diameter']:
             impute_start = time()
@@ -111,7 +111,7 @@ def main():
             print(f'imputation for {x} µm finished. Elapsed time: {(time()-impute_start)/60.0:.2f} minutes')
         
     else:
-        print('No imputation')
+        print('\n\n######### No imputation #########')
         
     print(f'\n\nwhole pipeline finished. Total elapsed time: {(time()-start_time)/3600.0:.2f} hours.')
 

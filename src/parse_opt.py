@@ -33,7 +33,7 @@ def usage():
     '''
     
     print('''
-runCVAEGLRM [option][value]...
+runDeconvolution [option][value]...
     -h or --help            print this help messages.
     -q or --query           input csv file of raw nUMI counts in spatial transcriptomic data (spots * genes), with absolute or relative path. Rows as spots and columns as genes. Row header as spot barcodes and column header as gene symbols are required.
     -r or --ref             input csv file of raw nUMI counts in scRNA-seq data (cells * genes), with absolute or relative path. Rows as cells and columns as genes. Row header as cell barcodes and column header as gene symbols are required.
@@ -144,7 +144,7 @@ def parseOpt():
             
             
         if opt in ('-v', '--version'):
-            print(f'CVAE-GLRM v{cur_version}')
+            print(f'SDePER v{cur_version}')
             sys.exit(0)  # exit with success
             
         

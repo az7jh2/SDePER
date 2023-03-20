@@ -84,7 +84,7 @@ def preprocess(spatial_file, ref_file, ref_anno_file, marker_file, A_file, use_c
         if ref_file is None or ref_anno_file is None:
             raise Exception('ERROR: building CVAE requires both reference scRNA-seq data and corresponding cell-type annotation specified! But at least one of them is not specified!')
             
-        print('first build CVAE...\n')
+        print('######### First build CVAE... #########\n')
         # build CVAE, and return the data dict including transformed spatial data and reference gene expression
         spatial_df, cvae_marker_df, new_markers = build_CVAE_whole(spatial_file, ref_file, ref_anno_file, marker_file, n_hv_gene, n_marker_per_cmp, pseudo_spot_min_cell, pseudo_spot_max_cell, seq_depth_scaler, cvae_input_scaler, cvae_init_lr, redo_de, diagnosis)
         
@@ -93,7 +93,7 @@ def preprocess(spatial_file, ref_file, ref_anno_file, marker_file, A_file, use_c
     
     else:
         
-        print('building CVAE skipped...\n')
+        print('######### Building CVAE skipped... #########\n')
         
         # to_dense has been depreated
         # read spatial dataframe into a sparse dataframe

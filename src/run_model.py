@@ -71,7 +71,7 @@ def run_GLRM(data, lambda_r=None, weight_threshold=1e-3, lambda_g=None, estimate
     n_celltype, n_gene = data['X'].shape
     n_spot = data['Y'].shape[0]
     
-    print('\nStart GLRM modeling...\n')
+    print('\n\n######### Start GLRM modeling... #########\n')
     
     print('GLRM settings:')
     # specify some program running parameters

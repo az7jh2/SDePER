@@ -304,7 +304,7 @@ def parseOpt():
             
             
         if opt in ('-v', '--version'):
-            print(f'CVAE-GLRM v{cur_version}')
+            print(f'SDePER v{cur_version}')
             sys.exit(0)  # exit with success
             
         
@@ -422,13 +422,13 @@ def parseOpt():
 
 def main():
     # run as independent function
-    print(f'\nCVAE-GLRM (Conditional Variational Autoencoder - Graph Laplacian Regularized stratified Model) v{cur_version}\n')
+    print(f'\nSDePER (Spatial Deconvolution method with Platform Effect Removal) v{cur_version}\n')
     
     start_time = time()
 
     paramdict = parseOpt()
     
-    print('\n\nstart imputation!')
+    print('\n\n######### Start imputation #########')
     
     for x in paramdict['impute_diameter']:
         impute_start = time()

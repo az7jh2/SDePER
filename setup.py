@@ -9,6 +9,7 @@ Created on Mon Feb 13 22:41:42 2023
 
 
 import setuptools
+from src.config import cur_version
 
 
 
@@ -22,11 +23,11 @@ with open("README.md", "r") as f:
     long_description = f.read()
 
 setuptools.setup(
-    name = "cvae-glrm",    # short and all lower case
-    version = "1.0.5",
+    name = "sdeper",    # short and all lower case
+    version = cur_version,
     author = "Ningshan Li",
     author_email = "hill103.2@gmail.com",
-    description = "Conditional Variational AutoEncoder - Graph Laplacian Regularized Model",
+    description = "Spatial Deconvolution method with Platform Effect Removal",
     long_description = long_description,
     long_description_content_type = "text/markdown",
     python_requires = ">=3.9.12",    # Minimum Python version
@@ -44,7 +45,7 @@ setuptools.setup(
     #    },
     entry_points = {    # create wrappers for globally accessible function in Python scripts; only function are supported
         "console_scripts": [
-            "runCVAEGLRM = cvaeglrm:main",
+            "runDeconvolution = cvaeglrm:main",
             "runImputation = imputation:main"
         ]
     },
@@ -54,11 +55,11 @@ setuptools.setup(
         "License :: OSI Approved :: MIT License",
         "Programming Language :: Python :: 3.9",
         "Operating System :: OS Independent"],
-    url = "https://az7jh2.github.io/CVAE-GLRM/",    # homepage
+    url = "https://az7jh2.github.io/SDePER/",    # homepage
     project_urls={
         # additional relevant URLs
-        'Documentation': 'https://cvae-glrm.readthedocs.io/en/latest/',
-        'Source': 'https://github.com/az7jh2/CVAE-GLRM',
+        'Documentation': 'https://sdeper.readthedocs.io/en/latest/',
+        'Source': 'https://github.com/az7jh2/SDePER',
         #'Changelog': 'https://github.com/pypa/sampleproject/issues',
         }
 )
