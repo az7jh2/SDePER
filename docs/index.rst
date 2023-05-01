@@ -1,51 +1,66 @@
-.. CVAE-GLRM documentation master file, created by
+.. SDePER documentation master file, created by
    sphinx-quickstart on Fri Feb 17 03:14:22 2023.
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-Welcome to CVAE-GLRM's documentation!
+Welcome to SDePER's documentation!
 =====================================
 
-.. image:: https://img.shields.io/github/v/release/az7jh2/CVAE-GLRM
+.. image:: https://img.shields.io/pypi/pyversions/sdeper
+   :target: https://www.python.org/
+   :alt: Python version
+.. image:: https://img.shields.io/github/v/release/az7jh2/SDePER
+   :target: https://github.com/az7jh2/SDePER
    :alt: GitHub release (latest by date)
-.. image:: https://img.shields.io/pypi/v/cvae-glrm
-   :alt: PyPI
-.. image:: https://img.shields.io/conda/v/bioconda/cvae-glrm
-   :alt: Conda
-.. image:: https://img.shields.io/docker/v/az7jh2/cvae-glrm?label=docker
+.. image:: https://img.shields.io/pypi/v/sdeper
+   :target: https://pypi.org/project/sdeper/
+   :alt: PyPI version
+.. image:: https://img.shields.io/docker/v/az7jh2/sdeper?label=docker
+   :target: https://hub.docker.com/repository/docker/az7jh2/sdeper/general
    :alt: Docker Image Version (latest by date))
-.. image:: https://img.shields.io/readthedocs/cvae-glrm/latest
+.. image:: https://img.shields.io/readthedocs/sdeper/latest
+   :target: https://sdeper.readthedocs.io/en/latest/
    :alt: Read the Docs (version)
 
-CVAE-GLRM (**C**onditional **V**ariational **A**uto**E**ncoder - **G**raph **L**aplacian **R**egularized **M**odel) is a two-step **hybrid** machine learning and regression method considering platform effect, spatial information and sparsity in **deconvolution** of spatial transcriptomic data using reference single-cell RNA sequencing data from same tissue type.
+
+SDePER (\ **S**\ patial **De**\ convolution method with **P**\ latform **E**\ ffect **R**\ emoval) is a two-step **hybrid** machine learning and regression method considering platform effect, spatial information and sparsity in **deconvolution** of spatial transcriptomics data using reference single-cell RNA sequencing data from same tissue type. It's also able to **impute** cell type compositions and gene expression at **enhanced resolution**.
 
 
-**Lumache** (/lu'make/) is a Python library for cooks and food lovers
-that creates recipes mixing random ingredients.
-It pulls data from the `Open Food Facts database <https://world.openfoodfacts.org/>`_
-and offers a *simple* and *intuitive* API.
+Quick Start
+-----------
 
-Check out the :doc:`usage` section for further information, including
-how to :ref:`installation` the project.
+SDePER can be installed using pip:
 
-.. note::
+   .. code-block:: bash
 
-   This project is under active development.
+      conda create -n sdeper-env python=3.9.12
+      conda activate sdeper-env
+      pip install sdeper
 
-Contents
---------
+SDePER requires **4 input files** for cell type deconvolution:
+
+   1. raw nUMI counts of **spatial transcriptomics data** (spots × genes): ``spatial.csv``
+   2. raw nUMI counts of **reference scRNA-seq data** (cells × genes): ``scrna_ref.csv``
+   3. **cell type annotations** for all cells in scRNA-seq data (cells × 1): ``scrna_anno.csv``
+   4. **adjacency matrix** of spots in spatial transcriptomics data (spots × spots): ``adjacency.csv``
+
+To start cell type deconvolution, run:
+
+   .. code-block:: bash
+
+      runDeconvolution -q spatial.csv -r scrna_ref.csv -c scrna_anno.csv -a adjacency.csv
+
+
+Check out :doc:`installation` page for detailed installation instructions, and :doc:`usage` page for commands for cell type deconvolution and imputation. The detailed descriptions of all options in commands are in :doc:`cli_options` page, and a guidance on setting the options is in :doc:`best_practice` page.
+
 
 .. toctree::
-   :maxdepth: 2
-   :caption: Contents:
-   Installation
-   Usage
+   :maxdepth: 4
+   :caption: Table of Contents
+   :hidden:
+
+   installation
+   usage
    cli_options
-   Changelog
-
-Indices and tables
-==================
-
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
+   best_practice
+   changelog

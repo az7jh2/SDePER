@@ -107,7 +107,7 @@ def main():
             # return imputed spot locations, cell-type proportions and gene expressions
             result[0].to_csv(os.path.join(output_path, f'impute_diameter_{x}_spot_loc.csv'))
             result[1].to_csv(os.path.join(output_path, f'impute_diameter_{x}_spot_celltype_prop.csv'))
-            result[3].to_csv(os.path.join(output_path, f'impute_diameter_{x}_spot_gene_norm_exp.csv'))
+            result[2].to_csv(os.path.join(output_path, f'impute_diameter_{x}_spot_gene_norm_exp.csv'))
             print(f'imputation for {x} µm finished. Elapsed time: {(time()-impute_start)/60.0:.2f} minutes')
         
     else:
