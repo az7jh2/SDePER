@@ -22,13 +22,40 @@ def print(*objects, sep=' ', end='\n', file=sys.stdout, flush=True):
 
 """
 version info
+UPDATE: read it from file VERSION rather than directly define it here
 """
-cur_version = '1.0.1'
+import os
+import pkgutil
+from importlib import resources
+
+def get_version():
+    # Try to read the VERSION file directly relative to this file's location
+    # for directly run the source code without any installation
+    try:
+        base_path = os.path.dirname(__file__)
+        version_file_path = os.path.join(base_path, 'VERSION')
+        with open(version_file_path, 'r') as version_file:
+            return version_file.read().strip()
+    except FileNotFoundError:
+        pass  # If direct reading fails, try the package resource approach
+
+    # Fallback to package resource approach for installed packages
+    try:
+        # Attempt to read the version file as a package resource
+        if pkgutil.find_loader('importlib.resources'):
+            version_data = resources.read_text('sdeper', 'VERSION')
+        else:  # Fallback for older Python versions
+            version_data = pkgutil.get_data('sdeper', 'VERSION').decode('utf-8')
+        return version_data.strip()
+    except (FileNotFoundError, TypeError):
+        return 'unknown'  # Fallback version if VERSION file is missing
+
+# read the VERSION file directly relative to this file's location
+cur_version = get_version()
 
 
 
 # The [is-docker package for npm](https://github.com/sindresorhus/is-docker/blob/master/index.js) suggests a robust approach to determine if it's running within a docker container
-import os
 def is_docker():
     path = '/proc/self/cgroup'
     return (

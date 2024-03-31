@@ -13,3 +13,4 @@ seaborn==0.11.2
 umap-learn==0.5.3
 distinctipy==1.2.2
 reportlab==3.6.12
+opencv-python==4.8.0.74

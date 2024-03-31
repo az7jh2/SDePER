@@ -4,12 +4,15 @@
 Created on Mon Feb 13 22:41:42 2023
 
 @author: hill103
+
+'setup.py' (this file) together with 'src' folder, 'MANIFEST.in', 'pyproject.toml', 'requirements.txt', 'README.md' and 'LICENSE' are required for publishing SDePER to PyPI
+
+CAUTION: Avoid import custom modules from src folder, although it works in publishing PyPI package, but it won't work for bioconda package building because of different building environments
 """
 
 
 
 import setuptools
-from src.config import cur_version
 
 
 
@@ -22,6 +25,12 @@ with open("requirements.txt", "r") as f:
 with open("README.md", "r") as f:
     long_description = f.read()
 
+
+# Read version string
+with open("src/VERSION", "r") as f:
+    cur_version = f.read().strip()
+
+
 setuptools.setup(
     name = "sdeper",    # short and all lower case
     version = cur_version,
@@ -32,7 +41,7 @@ setuptools.setup(
     long_description_content_type = "text/markdown",
     python_requires = ">=3.9.12",    # Minimum Python version
     install_requires = requirements,    # Dependencies
-    license_files = "LICENSE",    # license file will be include in top-level automatically
+    license_files = "LICENSE",    # license file will be include in top-level automatically (failed, specify it in MANIFEST.in)
     package_dir = {"": "src"},    # py files are in src folder
     # no need to specify 'packages=' since we only have one 'package' corresonding to the src folder
     # also no need to specify 'py_modules=', all py files under src folder will be recognized as modules
@@ -60,6 +69,6 @@ setuptools.setup(
         # additional relevant URLs
         'Documentation': 'https://sdeper.readthedocs.io/en/latest/',
         'Source': 'https://github.com/az7jh2/SDePER',
-        #'Changelog': 'https://github.com/pypa/sampleproject/issues',
+        'Changelog': 'https://sdeper.readthedocs.io/en/latest/changelog.html',
         }
 )
