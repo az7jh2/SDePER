@@ -10,10 +10,14 @@ this script configure the environment variables for GLRM
 
 
 
+import os
+import sys
+
+
+
 """
 overwrite the print function with the default set to flush = True
 """
-import sys
 def print(*objects, sep=' ', end='\n', file=sys.stdout, flush=True):
     import builtins
     builtins.print(*objects, sep=sep, end=end, file=file, flush=flush)
@@ -22,36 +26,10 @@ def print(*objects, sep=' ', end='\n', file=sys.stdout, flush=True):
 
 """
 version info
-UPDATE: read it from file VERSION rather than directly define it here
+UPDATE: read it from file version.py rather than directly define it here
 """
-import os
-import pkgutil
-from importlib import resources
-
-def get_version():
-    # Try to read the VERSION file directly relative to this file's location
-    # for directly run the source code without any installation
-    try:
-        base_path = os.path.dirname(__file__)
-        version_file_path = os.path.join(base_path, 'VERSION')
-        with open(version_file_path, 'r') as version_file:
-            return version_file.read().strip()
-    except FileNotFoundError:
-        pass  # If direct reading fails, try the package resource approach
-
-    # Fallback to package resource approach for installed packages
-    try:
-        # Attempt to read the version file as a package resource
-        if pkgutil.find_loader('importlib.resources'):
-            version_data = resources.read_text('sdeper', 'VERSION')
-        else:  # Fallback for older Python versions
-            version_data = pkgutil.get_data('sdeper', 'VERSION').decode('utf-8')
-        return version_data.strip()
-    except (FileNotFoundError, TypeError):
-        return 'unknown'  # Fallback version if VERSION file is missing
-
-# read the VERSION file directly relative to this file's location
-cur_version = get_version()
+from version import __version__
+cur_version = __version__
 
 
 
@@ -126,6 +104,7 @@ sigma2_eps = 1e-8
 
 """
 configuration for reproducible results in keras + TensorFlow
+skipped here, we configure the environment later
 """
 # Seed value
 #seed_value = 1154

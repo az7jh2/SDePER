@@ -28,6 +28,8 @@ This document provides a detailed overview of the file and directory organizatio
 
 [PyPI package page](https://pypi.org/project/sdeper/).
 
+`.github/workflows/publish-to-pypi.yml` is a GitHub Action worflow file for publishing package to PyPI trigged by new release in GitHub.
+
 - `MANIFEST.in`: Instructs setuptools on which additional non-code files should be included in the distribution.
 - `pyproject.toml`: Configuration file for using setuptools, defining build and packaging settings.
 - `setup.py`: Script for setting up the package for distribution.

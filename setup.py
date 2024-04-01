@@ -27,8 +27,13 @@ with open("README.md", "r") as f:
 
 
 # Read version string
-with open("src/VERSION", "r") as f:
-    cur_version = f.read().strip()
+with open("src/version.py", "r") as f:
+    lines = f.readlines()
+    for line in lines:
+        if line.startswith("__version__"):
+            # Extract the version string
+            cur_version = line.split("=")[1].strip().strip('"').strip("'")
+            break
 
 
 setuptools.setup(

@@ -26,6 +26,8 @@ To start cell type deconvolution by running
 runDeconvolution -q spatial.csv -r scrna_ref.csv -c scrna_anno.csv -a adjacency.csv
 ```
 
+**Homepage**: [https://az7jh2.github.io/SDePER/](https://az7jh2.github.io/SDePER/).
+
 **Full Documentation** for SDePER is available on [Read the Docs](https://sdeper.readthedocs.io/en/latest/).
 
 **Example data and Analysis** using SDePER are available in our GitHub repository [SDePER_Analysis](https://github.com/az7jh2/SDePER_Analysis).
