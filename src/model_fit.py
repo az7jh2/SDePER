@@ -35,15 +35,16 @@ def fit_base_model(data, gamma_g=None, global_optimize=False, hybrid_version=Tru
 
     Parameters
     ----------
-    data : a Dict contains all info need for modeling
-        X: a 2-D numpy matrix of celltype specific marker gene expression (celltypes * genes)
-        Y: a 2-D numpy matrix of spatial gene expression (spots * genes)
-        A: a 2-D numpy matrix of Adjacency matrix (spots * spots), or is None. Adjacency matrix of spatial sptots (1: connected / 0: disconnected). All 0 in diagonal.
-        N: a 1-D numpy array of sequencing depth of all spots (length #spots). If it's None, use sum of observed marker gene expressions as sequencing depth.
-        non_zero_mtx: If it's None, then do not filter zeros during regression. If it's a bool 2-D numpy matrix (spots * genes) as False means genes whose nUMI=0 while True means genes whose nUMI>0 in corresponding spots. The bool indicators can be calculated based on either observerd raw nUMI counts in spatial data, or CVAE transformed nUMI counts.
-        spot_names: a list of string of spot barcodes. Only keep spots passed filtering.
-        gene_names: a list of string of gene symbols. Only keep actually used marker gene symbols.
-        celltype_names: a list of string of celltype names.
+    data : Dict
+        a Dict contains all info need for modeling:
+            X: a 2-D numpy matrix of celltype specific marker gene expression (celltypes * genes).\n
+            Y: a 2-D numpy matrix of spatial gene expression (spots * genes).\n
+            A: a 2-D numpy matrix of Adjacency matrix (spots * spots), or is None. Adjacency matrix of spatial sptots (1: connected / 0: disconnected). All 0 in diagonal.\n
+            N: a 1-D numpy array of sequencing depth of all spots (length #spots). If it's None, use sum of observed marker gene expressions as sequencing depth.\n
+            non_zero_mtx: If it's None, then do not filter zeros during regression. If it's a bool 2-D numpy matrix (spots * genes) as False means genes whose nUMI=0 while True means genes whose nUMI>0 in corresponding spots. The bool indicators can be calculated based on either observerd raw nUMI counts in spatial data, or CVAE transformed nUMI counts.\n
+            spot_names: a list of string of spot barcodes. Only keep spots passed filtering.\n
+            gene_names: a list of string of gene symbols. Only keep actually used marker gene symbols.\n
+            celltype_names: a list of string of celltype names.
     gamma_g : 1-D numpy array
         gene-specific platform effect for all genes.
     global_optimize : bool, optional
@@ -60,9 +61,9 @@ def fit_base_model(data, gamma_g=None, global_optimize=False, hybrid_version=Tru
     Returns
     -------
     tuple
-        a tuple of estimated theta, e_alpha and sigma2
-            theta : celltype proportions (3-D numpy array (spots * celltypes * 1))
-            e_alpha : spot-specific effect (1-D array with length #spot)
+        a tuple of estimated theta, e_alpha and sigma2:
+            theta : celltype proportions (3-D numpy array (spots * celltypes * 1))\n
+            e_alpha : spot-specific effect (1-D array with length #spot)\n
             sigma2 : variance paramter of the lognormal distribution (float)
     '''
 
@@ -150,15 +151,16 @@ def estimating_gamma_g(data, hybrid_version=True, opt_method='L-BFGS-B', verbose
 
     Parameters
     ----------
-    data : a Dict contains all info need for modeling
-        X: a 2-D numpy matrix of celltype specific marker gene expression (celltypes * genes)
-        Y: a 2-D numpy matrix of spatial gene expression (spots * genes)
-        A: a 2-D numpy matrix of Adjacency matrix (spots * spots), or is None. Adjacency matrix of spatial sptots (1: connected / 0: disconnected). All 0 in diagonal.
-        N: a 1-D numpy array of sequencing depth of all spots (length #spots). If it's None, use sum of observed marker gene expressions as sequencing depth.
-        non_zero_mtx: If it's None, then do not filter zeros during regression. If it's a bool 2-D numpy matrix (spots * genes) as False means genes whose nUMI=0 while True means genes whose nUMI>0 in corresponding spots. The bool indicators can be calculated based on either observerd raw nUMI counts in spatial data, or CVAE transformed nUMI counts.
-        spot_names: a list of string of spot barcodes. Only keep spots passed filtering.
-        gene_names: a list of string of gene symbols. Only keep actually used marker gene symbols.
-        celltype_names: a list of string of celltype names.
+    data : Dict
+        a Dict contains all info need for modeling:
+            X: a 2-D numpy matrix of celltype specific marker gene expression (celltypes * genes).\n
+            Y: a 2-D numpy matrix of spatial gene expression (spots * genes).\n
+            A: a 2-D numpy matrix of Adjacency matrix (spots * spots), or is None. Adjacency matrix of spatial sptots (1: connected / 0: disconnected). All 0 in diagonal.\n
+            N: a 1-D numpy array of sequencing depth of all spots (length #spots). If it's None, use sum of observed marker gene expressions as sequencing depth.\n
+            non_zero_mtx: If it's None, then do not filter zeros during regression. If it's a bool 2-D numpy matrix (spots * genes) as False means genes whose nUMI=0 while True means genes whose nUMI>0 in corresponding spots. The bool indicators can be calculated based on either observerd raw nUMI counts in spatial data, or CVAE transformed nUMI counts.\n
+            spot_names: a list of string of spot barcodes. Only keep spots passed filtering.\n
+            gene_names: a list of string of gene symbols. Only keep actually used marker gene symbols.\n
+            celltype_names: a list of string of celltype names.
     hybrid_version : bool, optional
         if True, use the hybrid_version of GLRM, i.e. in ADMM local model loss function optimization for w but adaptive lasso constrain on theta. If False, local model loss function optimization and adaptive lasso will on the same w. The default is True.
     opt_method : string, optional
@@ -211,15 +213,16 @@ def fit_model_two_stage(data, G, gamma_g=None, lambda_r=None, weight_threshold=1
     
     Parameters
     ----------
-    data : a Dict contains all info need for modeling
-        X: a 2-D numpy matrix of celltype specific marker gene expression (celltypes * genes).
-        Y: a 2-D numpy matrix of spatial gene expression (spots * genes).
-        A: a 2-D numpy matrix of Adjacency matrix (spots * spots), or is None. Adjacency matrix of spatial sptots (1: connected / 0: disconnected). All 0 in diagonal.
-        N: a 1-D numpy array of sequencing depth of all spots (length #spots). If it's None, use sum of observed marker gene expressions as sequencing depth.
-        non_zero_mtx: If it's None, then do not filter zeros during regression. If it's a bool 2-D numpy matrix (spots * genes) as False means genes whose nUMI=0 while True means genes whose nUMI>0 in corresponding spots. The bool indicators can be calculated based on either observerd raw nUMI counts in spatial data, or CVAE transformed nUMI counts.
-        spot_names: a list of string of spot barcodes. Only keep spots passed filtering.
-        gene_names: a list of string of gene symbols. Only keep actually used marker genes.
-        celltype_names: a list of string of celltype names.
+    data : Dict
+        a Dict contains all info need for modeling:
+            X: a 2-D numpy matrix of celltype specific marker gene expression (celltypes * genes).\n
+            Y: a 2-D numpy matrix of spatial gene expression (spots * genes).\n
+            A: a 2-D numpy matrix of Adjacency matrix (spots * spots), or is None. Adjacency matrix of spatial sptots (1: connected / 0: disconnected). All 0 in diagonal.\n
+            N: a 1-D numpy array of sequencing depth of all spots (length #spots). If it's None, use sum of observed marker gene expressions as sequencing depth.\n
+            non_zero_mtx: If it's None, then do not filter zeros during regression. If it's a bool 2-D numpy matrix (spots * genes) as False means genes whose nUMI=0 while True means genes whose nUMI>0 in corresponding spots. The bool indicators can be calculated based on either observerd raw nUMI counts in spatial data, or CVAE transformed nUMI counts.\n
+            spot_names: a list of string of spot barcodes. Only keep spots passed filtering.\n
+            gene_names: a list of string of gene symbols. Only keep actually used marker genes.\n
+            celltype_names: a list of string of celltype names.
     G : built graph object from networks module
         used for constructing Laplacian Matrix
     gamma_g : 1-D numpy array
@@ -247,11 +250,11 @@ def fit_model_two_stage(data, G, gamma_g=None, lambda_r=None, weight_threshold=1
     -------
     Dict
         estimated model coefficients, including:
-            theta : celltype proportions (#spots * #celltypes * 1)
-            e_alpha : spot-specific effect (1-D array with length #spot)
-            sigma2 : variance paramter of the lognormal distribution (float)
-            gamma_g : gene-specific platform effect for all genes (1-D array with length #gene)
-            theta_tilde : celltype proportions for Adaptive Lasso (#spots * #celltypes * 1)
+            theta : celltype proportions (#spots * #celltypes * 1)\n
+            e_alpha : spot-specific effect (1-D array with length #spot)\n
+            sigma2 : variance paramter of the lognormal distribution (float)\n
+            gamma_g : gene-specific platform effect for all genes (1-D array with length #gene)\n
+            theta_tilde : celltype proportions for Adaptive Lasso (#spots * #celltypes * 1)\n
             theta_hat : celltype proportions for Graph Laplacian constrain (#spots * #celltypes * 1)
     """
     

@@ -22,18 +22,49 @@ from config import min_val, min_theta, min_sigma2, N_z, gamma, print, mu_digits,
 
 ################################# code related to global optimization #################################
 class RandomDisplacementBounds(object):
-    """
-    A custom step-function (https://stackoverflow.com/questions/47055970/how-can-i-write-bounds-of-parameters-by-using-basinhopping)
-    random displacement with bounds:  see: https://stackoverflow.com/a/21967888/2320035
-        Modified! (dropped acceptance-rejection sampling for a more specialized approach)
+    """A class to perform random displacement with bounds on parameters during optimization.
+
+    This step function is designed to modify the basinhopping algorithm's step-taking behavior by 
+    ensuring that new positions remain within specified bounds. This implementation uses a direct 
+    calculation to determine the minimum and maximum allowable steps rather than using
+    acceptance-rejection sampling, which can be found in the more general approach discussed on 
+    StackOverflow (https://stackoverflow.com/a/21967888/2320035). The approach has been modified 
+    for enhanced performance with specific bounds.
+    
+    ref: https://stackoverflow.com/questions/47055970/how-can-i-write-bounds-of-parameters-by-using-basinhopping
+
+    Attributes:
+        xmin (np.ndarray or list): The lower bounds of the parameters. None indicates unbounded.
+        xmax (np.ndarray or list): The upper bounds of the parameters. None indicates unbounded.
+        stepsize (float): The maximum step size to take in any parameter direction.
+
     """
     def __init__(self, xmin, xmax, stepsize=0.5):
+        """
+        Initializes the RandomDisplacementBounds with specified bounds and step size.
+
+        Args:
+            xmin (np.ndarray or list): The lower bounds of the parameters.
+            xmax (np.ndarray or list): The upper bounds of the parameters.
+            stepsize (float, optional): The maximum step size to take in any parameter direction. Defaults to 0.5.
+        """
         self.xmin = xmin
         self.xmax = xmax
         self.stepsize = stepsize
 
     def __call__(self, x):
-        """take a random step but ensure the new position is within the bounds """
+        """
+        Calculates a new position for the optimization algorithm by taking a random step
+        within the defined bounds.
+
+        This method ensures that the new position does not violate the specified bounds.
+
+        Args:
+            x (np.ndarray): The current position of the parameters in the optimization algorithm.
+
+        Returns:
+            np.ndarray: The new position after taking a random step within the bounds.
+        """
         # define a custom function to consider None in bound
         def calcMinStep(xmin, x, stepsize):
             if xmin is None:
@@ -347,8 +378,12 @@ def hv_comb(w_vec, y_vec, mu, gamma_g, sigma2, hv_x, hv_log_p, N, use_cache):
     
     this function will be used as target function for optimization
     
-    we assume y ~ Poisson(N*lambda)
-              ln(lambda) follow epsilon's distribution ~ N(mu, sigma2)
+    we assume:
+        
+        y ~ Poisson(N*lambda)
+
+        ln(lambda) follow epsilon's distribution ~ N(mu, sigma2)
+        
     then ln(N*lambda) ~ N(mu+ln(N), sigma2)
     
     N is sequencing depth for this spot
@@ -526,8 +561,12 @@ def hv_wrapper(w_vec, y_vec, mu, gamma_g, sigma2, hv_x, hv_log_p, N, use_cache):
     
     this wrapper will be used as target function for optimization
     
-    we assume y ~ Poisson(N*lambda)
-              ln(lambda) follow epsilon's distribution ~ N(mu, sigma2)
+    we assume:
+        
+        y ~ Poisson(N*lambda)
+    
+        ln(lambda) follow epsilon's distribution ~ N(mu, sigma2)
+    
     then ln(N*lambda) ~ N(mu+ln(N), sigma2)
     
     N is sequencing depth for this spot
@@ -585,18 +624,19 @@ def objective_loss_theta(w_vec, y_vec, mu, gamma_g, sigma2, nu_vec, rho, lambda_
     
     2. a loss of ADMM to make theta equals theta_hat (used for regularization/penalty; optional, controlled by nu_vec and rho)
                     
-                        1/(2*rho) (||w/sum(w) - theta_hat + u||_2)^2
-                        u is the scaled dual variables to make theta = theta_hat    
-                        and nu = theta_hat - u
+        1/(2*rho) (||w/sum(w) - theta_hat + u||_2)^2
+    
+    u is the scaled dual variables to make theta = theta_hat and nu = theta_hat - u
+    
     and we did re-parametrization w = e^alpha * theta, so theta = w / sum(w)
     
     3. a loss of Adaptive Lasso to shrink theta (optional, controlled by lambda_r and lasso_weight_vec)
     
-                        lambda_r * (inner product(w/sum(w), lasso_weight))
+        lambda_r * (inner product(w/sum(w), lasso_weight))
                         
     4. a loss of L2 penalty to shrink theta (optional, controlled by lambda_l2)
     
-                        lambda_l2 * (sum(squared(w/sum(w))))
+        lambda_l2 * (sum(squared(w/sum(w))))
     
     Parameters
     ----------
@@ -722,8 +762,11 @@ def update_theta(data, warm_start_theta, warm_start_e_alpha, gamma_g, sigma2, nu
     '''
     update theta (celltype proportion) and e_alpha (spot-specific effect) given sigma2 (variance paramter of the log-normal distribution) and gamma_g (gene-specific platform effect) by MLE
     
-    we assume ln(lambda) = alpha + gamma_g + ln(sum(theta*mu_X)) + epsilon
-              subject to sum(theta)=1, theta>=0
+    we assume 
+    
+        ln(lambda) = alpha + gamma_g + ln(sum(theta*mu_X)) + epsilon
+    
+        subject to sum(theta)=1, theta>=0
     
     mu_X is marker genes from data['X']
     
@@ -731,8 +774,9 @@ def update_theta(data, warm_start_theta, warm_start_e_alpha, gamma_g, sigma2, nu
     
     we did re-parametrization w = e^alpha * theta, then
     
-              ln(lambda) = gamma_g + ln(sum([e^alpha*theta]*mu_X)) + epsilon
-              subject to w>=0, it will imply sum(theta)=1 and theta>=0
+        ln(lambda) = gamma_g + ln(sum([e^alpha*theta]*mu_X)) + epsilon
+    
+        subject to w>=0, it will imply sum(theta)=1 and theta>=0
     
     the steps to update theta and e_alpha:
         1. dimension change of theta, theta_hat, u from 3-D (spots * celltypes * 1) to 1-D (celltypes), and do re-parametrization to get w
@@ -741,15 +785,16 @@ def update_theta(data, warm_start_theta, warm_start_e_alpha, gamma_g, sigma2, nu
 
     Parameters
     ----------
-    data : a Dict contains all info need for modeling
-        X: a 2-D numpy matrix of celltype specific marker gene expression (celltypes * genes).
-        Y: a 2-D numpy matrix of spatial gene expression (spots * genes).
-        A: a 2-D numpy matrix of Adjacency matrix (spots * spots), or is None. Adjacency matrix of spatial sptots (1: connected / 0: disconnected). All 0 in diagonal.
-        N: a 1-D numpy array of sequencing depth of all spots (length #spots). If it's None, use sum of observed marker gene expressions as sequencing depth.
-        non_zero_mtx: If it's None, then do not filter zeros during regression. If it's a bool 2-D numpy matrix (spots * genes) as False means genes whose nUMI=0 while True means genes whose nUMI>0 in corresponding spots. The bool indicators can be calculated based on either observerd raw nUMI counts in spatial data, or CVAE transformed nUMI counts.
-        spot_names: a list of string of spot barcodes. Only keep spots passed filtering.
-        gene_names: a list of string of gene symbols. Only keep actually used marker genes.
-        celltype_names: a list of string of celltype names.
+    data : Dict
+        a Dict contains all info need for modeling:
+            X: a 2-D numpy matrix of celltype specific marker gene expression (celltypes * genes).\n
+            Y: a 2-D numpy matrix of spatial gene expression (spots * genes).\n
+            A: a 2-D numpy matrix of Adjacency matrix (spots * spots), or is None. Adjacency matrix of spatial sptots (1: connected / 0: disconnected). All 0 in diagonal.\n
+            N: a 1-D numpy array of sequencing depth of all spots (length #spots). If it's None, use sum of observed marker gene expressions as sequencing depth.\n
+            non_zero_mtx: If it's None, then do not filter zeros during regression. If it's a bool 2-D numpy matrix (spots * genes) as False means genes whose nUMI=0 while True means genes whose nUMI>0 in corresponding spots. The bool indicators can be calculated based on either observerd raw nUMI counts in spatial data, or CVAE transformed nUMI counts.\n
+            spot_names: a list of string of spot barcodes. Only keep spots passed filtering.\n
+            gene_names: a list of string of gene symbols. Only keep actually used marker genes.\n
+            celltype_names: a list of string of celltype names.
     warm_start_theta : 3-D numpy array (spots * celltypes * 1)
         initial guess of theta (celltype proportion).
     warm_start_e_alpha : 1-D numpy array
@@ -936,8 +981,11 @@ def update_sigma2(data, theta, e_alpha, gamma_g, sigma2, opt_method='L-BFGS-B', 
     '''
     update sigma2 (variance paramter of the lognormal distribution) given theta (celltype proportion), e_alpha (spot-specific effect) and gamma_g (gene-specific platform effect) by MLE
     
-    we assume ln(lambda) = alpha + gamma_g + ln(sum(theta*mu_X)) + epsilon
-              subject to sum(theta)=1, theta>=0
+    we assume
+    
+        ln(lambda) = alpha + gamma_g + ln(sum(theta*mu_X)) + epsilon
+        
+        subject to sum(theta)=1, theta>=0
     
     mu_X is marker genes from data['X']
     
@@ -945,22 +993,24 @@ def update_sigma2(data, theta, e_alpha, gamma_g, sigma2, opt_method='L-BFGS-B', 
     
     we did re-parametrization w = e^alpha * theta, then
     
-              ln(lambda) = gamma_g + ln(sum([e^alpha*theta]*mu_X)) + epsilon
-              subject to w>=0, it will imply sum(theta)=1 and theta>=0
+        ln(lambda) = gamma_g + ln(sum([e^alpha*theta]*mu_X)) + epsilon
+        
+        subject to w>=0, it will imply sum(theta)=1 and theta>=0
               
     currently optimization of sigma2 DO NOT support parallel computing
 
     Parameters
     ----------
-    data : a Dict contains all info need for modeling
-        X: a 2-D numpy matrix of celltype specific marker gene expression (celltypes * genes).
-        Y: a 2-D numpy matrix of spatial gene expression (spots * genes).
-        A: a 2-D numpy matrix of Adjacency matrix (spots * spots), or is None. Adjacency matrix of spatial sptots (1: connected / 0: disconnected). All 0 in diagonal.
-        N: a 1-D numpy array of sequencing depth of all spots (length #spots). If it's None, use sum of observed marker gene expressions as sequencing depth.
-        non_zero_mtx: If it's None, then do not filter zeros during regression. If it's a bool 2-D numpy matrix (spots * genes) as False means genes whose nUMI=0 while True means genes whose nUMI>0 in corresponding spots. The bool indicators can be calculated based on either observerd raw nUMI counts in spatial data, or CVAE transformed nUMI counts.
-        spot_names: a list of string of spot barcodes. Only keep spots passed filtering.
-        gene_names: a list of string of gene symbols. Only keep actually used marker genes.
-        celltype_names: a list of string of celltype names.
+    data : Dict
+        a Dict contains all info need for modeling:
+            X: a 2-D numpy matrix of celltype specific marker gene expression (celltypes * genes).\n
+            Y: a 2-D numpy matrix of spatial gene expression (spots * genes).\n
+            A: a 2-D numpy matrix of Adjacency matrix (spots * spots), or is None. Adjacency matrix of spatial sptots (1: connected / 0: disconnected). All 0 in diagonal.\n
+            N: a 1-D numpy array of sequencing depth of all spots (length #spots). If it's None, use sum of observed marker gene expressions as sequencing depth.\n
+            non_zero_mtx: If it's None, then do not filter zeros during regression. If it's a bool 2-D numpy matrix (spots * genes) as False means genes whose nUMI=0 while True means genes whose nUMI>0 in corresponding spots. The bool indicators can be calculated based on either observerd raw nUMI counts in spatial data, or CVAE transformed nUMI counts.\n
+            spot_names: a list of string of spot barcodes. Only keep spots passed filtering.\n
+            gene_names: a list of string of gene symbols. Only keep actually used marker genes.\n
+            celltype_names: a list of string of celltype names.
     theta : 3-D numpy array (spots * celltypes * 1)
         theta (celltype proportion).
     e_alpha : 1-D numpy array
@@ -1099,13 +1149,18 @@ def adaptive_lasso(nu, rho, lambda_r=1.0, lasso_weight=None):
     theta_tilde = argmin lambda_r*lasso_weight*theta_tilde + 1/(2*rho) * (||theta_tilde-theta_hat+u_tilde||_2)^2
     
     that is
-            -if theta_tilde>=0, theta_tilde = theta_hat - u_tilde - lambda_r*rho*lasso_weight
-            -if theta_tilde<0, theta_tilde = theta_hat - u_tilde + lambda_r*rho*lasso_weight
+    
+        - if theta_tilde>=0, theta_tilde = theta_hat - u_tilde - lambda_r*rho*lasso_weight
+        
+        - if theta_tilde<0, theta_tilde = theta_hat - u_tilde + lambda_r*rho*lasso_weight
             
     change it to
-            -if theta_hat-u_tilde-lambda_r*rho*lasso_weight>=0, theta_tilde = theta_hat - u_tilde - lambda_r*rho*lasso_weight
-            -if theta_hat-u_tilde+lambda_r*rho*lasso_weight<=0, theta_tilde = theta_hat - u_tilde + lambda_r*rho*lasso_weight
-            -if theta_hat-u_tilde-lambda_r*rho*lasso_weight<0 or theta_hat-u_tilde+lambda_r*rho*lasso_weight>0, not defined, let theta_tilde = 0
+    
+        - if theta_hat-u_tilde-lambda_r*rho*lasso_weight>=0, theta_tilde = theta_hat - u_tilde - lambda_r*rho*lasso_weight
+        
+        - if theta_hat-u_tilde+lambda_r*rho*lasso_weight<=0, theta_tilde = theta_hat - u_tilde + lambda_r*rho*lasso_weight
+        
+        - if theta_hat-u_tilde-lambda_r*rho*lasso_weight<0 or theta_hat-u_tilde+lambda_r*rho*lasso_weight>0, not defined, let theta_tilde = 0
             
     and nu = theta_hat - u_tilde
     

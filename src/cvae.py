@@ -35,7 +35,7 @@ disable_eager_execution()
 
 
 
-def build_CVAE(spatial_df, scRNA_df, scRNA_celltype, n_marker_per_cmp, pseudo_spot_min_cell, pseudo_spot_max_cell, seq_depth_scaler, cvae_input_scaler, cvae_init_lr, diagnosis, rerun_DE=True):
+def build_CVAE(spatial_df, scRNA_df, scRNA_celltype, n_marker_per_cmp, pseudo_spot_min_cell, pseudo_spot_max_cell, seq_depth_scaler, cvae_input_scaler, cvae_init_lr, use_fdr, p_val_cutoff, fc_cutoff, pct1_cutoff, pct2_cutoff, sortby_fc, diagnosis, rerun_DE=True, filter_gene=True):
     '''
     build CVAE to adjust platform effect, return transformed spatial gene expression and scRNA-seq cell-type gene signature
     
@@ -61,10 +61,25 @@ def build_CVAE(spatial_df, scRNA_df, scRNA_celltype, n_marker_per_cmp, pseudo_sp
         maximum value of the scaled input for CVAE
     cvae_init_lr : float
         initial learning rate for training CVAE
+    use_fdr : bool
+        whether to use FDR adjusted p value for filtering and sorting
+    p_val_cutoff : float
+        threshold of p value (or FDR if --use_fdr is true) in marker genes filtering
+    fc_cutoff : float
+        threshold of fold change (without log transform!) in marker genes filtering
+    pct1_cutoff : float
+        threshold of pct.1 in marker genes filtering
+    pct2_cutoff : float
+        threshold of pct.2 in marker genes filtering
+    sortby_fc : bool
+        whether to sort marker genes by fold change
     diagnosis : bool
         if True save more information to files for diagnosis CVAE and hyper-parameter selection
     rerun_DE : bool, optional
         whether to rerun DE on the CVAE transformed scRNA-seq data, since the DE genes might be different with before CVAE transforming.
+    filter_gene : bool
+        whether to filter genes before DE.
+    
 
     Returns
     -------
@@ -295,6 +310,7 @@ def build_CVAE(spatial_df, scRNA_df, scRNA_celltype, n_marker_per_cmp, pseudo_sp
     
     
     # change tensorflow seed value, set the same seed value for sampling samples from latent space to decoder before training
+    # still has unknown randomness source even set seed here...
     set_random_seed(1154)
     
     # Train CVAE
@@ -316,7 +332,7 @@ def build_CVAE(spatial_df, scRNA_df, scRNA_celltype, n_marker_per_cmp, pseudo_sp
         print(f'\ntraining finished in {n_epoch} epochs (reach max pre-specified epoches), transform data to adjust the platform effect...\n')
 
     
-    # proprecess the trained models
+    # postprocess the trained models
     # Subset the encoder
     encoder = Model([cvae.get_layer('encoder_input').input, cvae.get_layer('cond_input').input],
                     [cvae.get_layer('z_mean').output, cvae.get_layer('z_log_var').output],
@@ -369,7 +385,7 @@ def build_CVAE(spatial_df, scRNA_df, scRNA_celltype, n_marker_per_cmp, pseudo_sp
     if rerun_DE:
         print('\nre-run DE on CVAE transformed scRNA-seq data!')
         from utils import rerun_DE
-        new_markers = rerun_DE(scRNA_decode_df, scRNA_celltype, n_marker_per_cmp, diagnosis)
+        new_markers = rerun_DE(scRNA_decode_df, scRNA_celltype, n_marker_per_cmp, use_fdr, p_val_cutoff, fc_cutoff, pct1_cutoff, pct2_cutoff, sortby_fc, diagnosis, filter_gene)
     else:
         new_markers = None
     
@@ -573,7 +589,7 @@ def build_CVAE(spatial_df, scRNA_df, scRNA_celltype, n_marker_per_cmp, pseudo_sp
 
 
 
-def build_CVAE_whole(spatial_file, ref_file, ref_anno_file, marker_file, n_hv_gene, n_marker_per_cmp, pseudo_spot_min_cell, pseudo_spot_max_cell, seq_depth_scaler, cvae_input_scaler, cvae_init_lr, redo_de, diagnosis):
+def build_CVAE_whole(spatial_file, ref_file, ref_anno_file, marker_file, n_hv_gene, n_marker_per_cmp, pseudo_spot_min_cell, pseudo_spot_max_cell, seq_depth_scaler, cvae_input_scaler, cvae_init_lr, redo_de, use_fdr, p_val_cutoff, fc_cutoff, pct1_cutoff, pct2_cutoff, sortby_fc, diagnosis, filter_cell, filter_gene):
     '''
     read related CSV files, build CVAE to adjust platform effect, return transformed spatial gene expression and scRNA-seq cell-type gene signature
 
@@ -603,8 +619,24 @@ def build_CVAE_whole(spatial_file, ref_file, ref_anno_file, marker_file, n_hv_ge
         initial learning rate for training CVAE
     redo_de : bool
         whether to redo DE after CVAE transformation
+    use_fdr : bool
+        whether to use FDR adjusted p value for filtering and sorting
+    p_val_cutoff : float
+        threshold of p value (or FDR if --use_fdr is true) in marker genes filtering
+    fc_cutoff : float
+        threshold of fold change (without log transform!) in marker genes filtering
+    pct1_cutoff : float
+        threshold of pct.1 in marker genes filtering
+    pct2_cutoff : float
+        threshold of pct.2 in marker genes filtering
+    sortby_fc : bool
+        whether to sort marker genes by fold change
     diagnosis : bool
         if True save more information to files for diagnosis CVAE and hyper-parameter selection
+    filter_cell : bool
+        whether to filter cells before DE
+    filter_gene : bool
+        whether to filter genes before DE
 
     Returns
     -------
@@ -619,10 +651,10 @@ def build_CVAE_whole(spatial_file, ref_file, ref_anno_file, marker_file, n_hv_ge
     start_time = time()
     
     # read spatial data
-    spatial_spot_obj = read_spatial_data(spatial_file)
+    spatial_spot_obj = read_spatial_data(spatial_file, filter_gene)
     
     # read scRNA-seq data
-    scrna_obj = read_scRNA_data(ref_file, ref_anno_file)
+    scrna_obj = read_scRNA_data(ref_file, ref_anno_file, filter_cell, filter_gene)
     
     # Overlap of genes between scRNA cell-level and spatial spot-level data
     overlap_genes = list(set(spatial_spot_obj.var_names).intersection(set(scrna_obj.var_names)))
@@ -672,7 +704,7 @@ def build_CVAE_whole(spatial_file, ref_file, ref_anno_file, marker_file, n_hv_ge
         else:
             # perform DE, return the marker gene expression
             print('no marker gene profile provided. Perform DE to get cell-type marker genes on scRNA-seq data...\n')
-            marker_genes = run_DE(scrna_obj, n_marker_per_cmp, diagnosis, 'DE celltype markers.csv')
+            marker_genes = run_DE(scrna_obj, n_marker_per_cmp, use_fdr, p_val_cutoff, fc_cutoff, pct1_cutoff, pct2_cutoff, sortby_fc, diagnosis, 'DE celltype markers.csv')
         
         # final gene list for downstream analysis
         final_gene_list = sorted(list(set(scrna_hv_genes).union(set(marker_genes))))
@@ -688,7 +720,9 @@ def build_CVAE_whole(spatial_file, ref_file, ref_anno_file, marker_file, n_hv_ge
                                           sc.get.obs_df(scrna_obj, keys=final_gene_list),
                                           scrna_celltype,
                                           n_marker_per_cmp, pseudo_spot_min_cell, pseudo_spot_max_cell, seq_depth_scaler,
-                                          cvae_input_scaler, cvae_init_lr, diagnosis, rerun_DE=redo_de)
+                                          cvae_input_scaler, cvae_init_lr,
+                                          use_fdr, p_val_cutoff, fc_cutoff, pct1_cutoff, pct2_cutoff, sortby_fc,
+                                          diagnosis, rerun_DE=redo_de, filter_gene=filter_gene)
     
     print(f'\nplatform effect adjustment by CVAE finished. Elapsed time: {(time()-start_time)/60.0:.2f} minutes.\n\n')
     

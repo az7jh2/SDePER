@@ -131,15 +131,16 @@ def cv_find_lambda_r(data, mle_theta, mle_e_alpha, gamma_g, sigma2, lasso_weight
     
     Parameters
     ----------
-    data : a Dict contains all info need for modeling
-        X: a 2-D numpy matrix of celltype specific marker gene expression (celltypes * genes).
-        Y: a 2-D numpy matrix of spatial gene expression (spots * genes).
-        A: a 2-D numpy matrix of Adjacency matrix (spots * spots), or is None. Adjacency matrix of spatial sptots (1: connected / 0: disconnected). All 0 in diagonal.
-        N: a 1-D numpy array of sequencing depth of all spots (length #spots). If it's None, use sum of observed marker gene expressions as sequencing depth.
-        non_zero_mtx: If it's None, then do not filter zeros during regression. If it's a bool 2-D numpy matrix (spots * genes) as False means genes whose nUMI=0 while True means genes whose nUMI>0 in corresponding spots. The bool indicators can be calculated based on either observerd raw nUMI counts in spatial data, or CVAE transformed nUMI counts.
-        spot_names: a list of string of spot barcodes. Only keep spots passed filtering.
-        gene_names: a list of string of gene symbols. Only keep actually used marker genes.
-        celltype_names: a list of string of celltype names.
+    data : Dict
+        a Dict contains all info need for modeling:
+            X: a 2-D numpy matrix of celltype specific marker gene expression (celltypes * genes).\n
+            Y: a 2-D numpy matrix of spatial gene expression (spots * genes).\n
+            A: a 2-D numpy matrix of Adjacency matrix (spots * spots), or is None. Adjacency matrix of spatial sptots (1: connected / 0: disconnected). All 0 in diagonal.\n
+            N: a 1-D numpy array of sequencing depth of all spots (length #spots). If it's None, use sum of observed marker gene expressions as sequencing depth.\n
+            non_zero_mtx: If it's None, then do not filter zeros during regression. If it's a bool 2-D numpy matrix (spots * genes) as False means genes whose nUMI=0 while True means genes whose nUMI>0 in corresponding spots. The bool indicators can be calculated based on either observerd raw nUMI counts in spatial data, or CVAE transformed nUMI counts.\n
+            spot_names: a list of string of spot barcodes. Only keep spots passed filtering.\n
+            gene_names: a list of string of gene symbols. Only keep actually used marker genes.\n
+            celltype_names: a list of string of celltype names.\n
     mle_theta : 3-D numpy array (spots * celltypes * 1)
         estimated theta (celltype proportion) by MLE.
     mle_e_alpha : 1-D numpy array
@@ -340,15 +341,16 @@ def cv_find_lambda_g(data, G, theta_mask, gamma_g, sigma2, candidate_list, hybri
     
     Parameters
     ----------
-    data : a Dict contains all info need for modeling
-        X: a 2-D numpy matrix of celltype specific marker gene expression (celltypes * genes).
-        Y: a 2-D numpy matrix of spatial gene expression (spots * genes).
-        A: a 2-D numpy matrix of Adjacency matrix (spots * spots), or is None. Adjacency matrix of spatial sptots (1: connected / 0: disconnected). All 0 in diagonal.
-        N: a 1-D numpy array of sequencing depth of all spots (length #spots). If it's None, use sum of observed marker gene expressions as sequencing depth.
-        non_zero_mtx: If it's None, then do not filter zeros during regression. If it's a bool 2-D numpy matrix (spots * genes) as False means genes whose nUMI=0 while True means genes whose nUMI>0 in corresponding spots. The bool indicators can be calculated based on either observerd raw nUMI counts in spatial data, or CVAE transformed nUMI counts.
-        spot_names: a list of string of spot barcodes. Only keep spots passed filtering.
-        gene_names: a list of string of gene symbols. Only keep actually used marker genes.
-        celltype_names: a list of string of celltype names.
+    data : Dict
+        a Dict contains all info need for modeling:
+            X: a 2-D numpy matrix of celltype specific marker gene expression (celltypes * genes).\n
+            Y: a 2-D numpy matrix of spatial gene expression (spots * genes).\n
+            A: a 2-D numpy matrix of Adjacency matrix (spots * spots), or is None. Adjacency matrix of spatial sptots (1: connected / 0: disconnected). All 0 in diagonal.\n
+            N: a 1-D numpy array of sequencing depth of all spots (length #spots). If it's None, use sum of observed marker gene expressions as sequencing depth.\n
+            non_zero_mtx: If it's None, then do not filter zeros during regression. If it's a bool 2-D numpy matrix (spots * genes) as False means genes whose nUMI=0 while True means genes whose nUMI>0 in corresponding spots. The bool indicators can be calculated based on either observerd raw nUMI counts in spatial data, or CVAE transformed nUMI counts.\n
+            spot_names: a list of string of spot barcodes. Only keep spots passed filtering.\n
+            gene_names: a list of string of gene symbols. Only keep actually used marker genes.\n
+            celltype_names: a list of string of celltype names.\n
     theta_mask : 3-D numpy array (spots * celltypes * 1)
         mask for cell-type proportions (1: present, 0: not present). Only used for stage 2 theta optmization.
     gamma_g : 1-D numpy array

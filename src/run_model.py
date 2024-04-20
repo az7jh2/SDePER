@@ -25,15 +25,16 @@ def run_GLRM(data, lambda_r=None, weight_threshold=1e-3, lambda_g=None, estimate
 
     Parameters
     ----------
-    data : a Dict contains all info need for modeling
-        X: a 2-D numpy matrix of celltype specific marker gene expression (celltypes * genes).
-        Y: a 2-D numpy matrix of spatial gene expression (spots * genes).
-        A: a 2-D numpy matrix of Adjacency matrix (spots * spots), or is None. Adjacency matrix of spatial sptots (1: connected / 0: disconnected). All 0 in diagonal.
-        N: a 1-D numpy array of sequencing depth of all spots (length #spots). If it's None, use sum of observed marker gene expressions as sequencing depth.
-        non_zero_mtx: If it's None, then do not filter zeros during regression. If it's a bool 2-D numpy matrix (spots * genes) as False means genes whose nUMI=0 while True means genes whose nUMI>0 in corresponding spots. The bool indicators can be calculated based on either observerd raw nUMI counts in spatial data, or CVAE transformed nUMI counts.
-        spot_names: a list of string of spot barcodes. Only keep spots passed filtering.
-        gene_names: a list of string of gene symbols. Only keep actually used marker genes.
-        celltype_names: a list of string of celltype names.
+    data : Dict
+        a Dict contains all info need for modeling:
+            X: a 2-D numpy matrix of celltype specific marker gene expression (celltypes * genes).\n
+            Y: a 2-D numpy matrix of spatial gene expression (spots * genes).\n
+            A: a 2-D numpy matrix of Adjacency matrix (spots * spots), or is None. Adjacency matrix of spatial sptots (1: connected / 0: disconnected). All 0 in diagonal.\n
+            N: a 1-D numpy array of sequencing depth of all spots (length #spots). If it's None, use sum of observed marker gene expressions as sequencing depth.\n
+            non_zero_mtx: If it's None, then do not filter zeros during regression. If it's a bool 2-D numpy matrix (spots * genes) as False means genes whose nUMI=0 while True means genes whose nUMI>0 in corresponding spots. The bool indicators can be calculated based on either observerd raw nUMI counts in spatial data, or CVAE transformed nUMI counts.\n
+            spot_names: a list of string of spot barcodes. Only keep spots passed filtering.\n
+            gene_names: a list of string of gene symbols. Only keep actually used marker genes.\n
+            celltype_names: a list of string of celltype names.
     lambda_r : float, optional
         strength for Adaptive Lasso penalty. The default is None, i.e. use cross-validation to determine optimal value
     weight_threshold : float, optional
@@ -55,11 +56,11 @@ def run_GLRM(data, lambda_r=None, weight_threshold=1e-3, lambda_g=None, estimate
     -------
     result : Dict
         estimated model coefficients, including (note theta dimension changed back to 2-D):
-            theta : celltype proportions (#spots * #celltypes)
-            e_alpha : spot-specific effect (1-D array with length #spot)
-            sigma2 : variance paramter of the lognormal distribution (float)
-            gamma_g : gene-specific platform effect for all genes (1-D array with length #gene)
-            theta_tilde : celltype proportions for Adaptive Lasso (#spots * #celltypes)
+            theta : celltype proportions (#spots * #celltypes)\n
+            e_alpha : spot-specific effect (1-D array with length #spot)\n
+            sigma2 : variance paramter of the lognormal distribution (float)\n
+            gamma_g : gene-specific platform effect for all genes (1-D array with length #gene)\n
+            theta_tilde : celltype proportions for Adaptive Lasso (#spots * #celltypes)\n
             theta_hat : celltype proportions for Graph Laplacian constrain (#spots * #celltypes)
     """
     

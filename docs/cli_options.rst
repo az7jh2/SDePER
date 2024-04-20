@@ -206,15 +206,115 @@ General options
 Cell type marker identification options
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+.. versionchanged:: 1.1.0
+
+   
+   Cell-type specific markers are identified by Differential analysis (DE) across cell-types in reference scRNA-seq data. We also perform cell and/or gene filtering before DE. Each time we ONLY compare the normalized gene expression (raw nUMI counts divided by sequencing depth) one cell-type (1st) vs another one cell-type (2nd) using **Wilcoxon Rank Sum Test**, then take the UNION of all identified markers for downstream analysis.
+
+   Before version 1.1.0, for each comparison genes with a FDR adjusted p value < 0.05 will be selected first, then these marker genes will be sorted by a combined rank of log fold change and pct.1/pct.2, and finally pick up specified number of genes with TOP ranks.
+
+   In version 1.1.0, the ranking strategy has been revised. Now we filter the marker genes with pre-set thresholds of p value (or FDR), fold change, pct.1 (percentage of cells expressed this marker in 1st cell-type) and pct.2 (percentage of cells expressed this marker in 2nd cell-type). Next we sort the marker genes by p value (or FDR) or fold change, and select the TOP ones.
+
+
 .. option:: --n_marker_per_cmp
 
-   Number of selected TOP marker genes for each comparison of ONE cell type against another ONE cell type using Wilcoxon Rank Sum Test.
-
-   For each comparison, genes with a FDR adjusted p value < 0.05 will be selected first, then these marker genes will be sorted by a combined rank of log fold change and pct.1/pct.2, and finally pick up specified number of gene with TOP ranks.
+   Number of selected TOP marker genes for each comparison of ONE cell-type against another ONE cell-type using Wilcoxon Rank Sum Test. For each comparison, genes passing filtering will be selected first, then these marker genes will be sorted by fold change or p value (or FDR), and finally pick up specified number of genes with TOP ranks. If the number of available genes is less than the specified number, a WARNING will be shown in the program running log file.
 
    :Type: integer
 
-   :Default: ``30``
+   :Default: ``10``
+
+   .. versionchanged:: 1.1.0
+
+      Default value changed from 30 to 10.
+
+
+.. option:: --use_fdr
+
+   Whether to use FDR adjusted p value for filtering and sorting. If true use FDR adjusted p value; if false orginal p value will be used instead.
+
+   :Type: boolean
+
+   :Default: ``true``
+
+   .. versionadded:: 1.1.0
+
+
+.. option:: --p_val_cutoff
+
+   Threshold of p value (or FDR if :option:`--use_fdr` is true) in marker genes filtering. Only genes with p value (or FDR if :option:`--use_fdr` is true) <= 0.05 will be kept.
+
+   :Type: float
+
+   :Default: ``0.05``
+
+   .. versionadded:: 1.1.0
+
+
+.. option:: --fc_cutoff
+
+   Threshold of fold change (without log transform!) in marker genes filtering. By default only genes with fold change >= 1.2 will be kept.
+
+   :Type: float
+
+   :Default: ``1.2``
+
+   .. versionadded:: 1.1.0
+
+
+.. option:: --pct1_cutoff
+
+   Threshold of pct.1 (percentage of cells expressed this marker in 1st cell-type) in marker genes filtering. By default only genes with pct.1 >= 0.3 will be kept.
+
+   :Type: float
+
+   :Default: ``0.3``
+
+   .. versionadded:: 1.1.0
+
+
+.. option:: --pct2_cutoff
+
+   Threshold of pct.2 (percentage of cells expressed this marker in 2nd cell-type) in marker genes filtering. By default only genes with pct.2 <= 0.1 will be kept.
+
+   :Type: float
+
+   :Default: ``0.1``
+
+   .. versionadded:: 1.1.0
+
+
+.. option:: --sortby_fc
+
+   Whether to sort marker genes by fold change. If true sort marker genes by fold change then select TOP ones. If false, p value (or FDR if :option:`--use_fdr` is true) will be used to sort marker genes instead.
+
+   :Type: boolean
+
+   :Default: ``true``
+
+   .. versionadded:: 1.1.0
+
+
+.. option:: --filter_cell
+
+   Whether to filter cells with <200 genes for reference scRNA-seq data before differential analysis. NOTE we only apply cell filtering on reference data.
+
+   :Type: boolean
+
+   :Default: ``true``
+
+   .. versionadded:: 1.1.0
+
+
+.. option:: --filter_gene
+
+   Whether to filter genes presented in <10 cells for reference scRNA-seq data and <3 spots for spatial data before differential analysis.
+
+   :Type: boolean
+
+   :Default: ``true``
+
+   .. versionadded:: 1.1.0
 
 
 .. _deconvolution_opt_cvae:
@@ -235,11 +335,15 @@ CVAE-related options
 
    :Type: integer
 
-   :Default: ``1000``
+   :Default: ``200``
+
+   .. versionchanged:: 1.1.0
+
+      Default value changed from 1000 to 200.
 
    .. note::
 
-      Highly variable genes are used for building CVAE only, and cell type-specific marker genes will also be used for building CVAE. It's recoomended to set the number of highly variable genes to be close to the number of identified marker genes.
+      Highly variable genes are used for building CVAE only, and cell type-specific marker genes will also be used for building CVAE. It's recommended to set the number of highly variable genes to be close to the number of identified marker genes.
 
 
 .. option:: --pseudo_spot_min_cell

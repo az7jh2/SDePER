@@ -6,11 +6,11 @@ matplotlib==3.5.2
 scikit-learn==1.1.1
 numba==0.55.2
 openpyxl==3.0.10
-tensorflow==2.9.1
+tensorflow-cpu==2.9.1
 scanpy==1.9.1
 scikit-misc==0.1.4
 seaborn==0.11.2
 umap-learn==0.5.3
 distinctipy==1.2.2
-reportlab==3.6.12
-opencv-python==4.8.0.74
+reportlab==4.1.0
+opencv-python==4.6.0.66

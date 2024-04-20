@@ -16,6 +16,19 @@ import sys, os
 from config import print, input_path, cur_version
 import numpy as np
 import pandas as pd
+import copy
+
+
+
+# default value for options
+default_paramdict = {'spatial_file': None, 'ref_file': None, 'ref_celltype_file': None, 'marker_file': None, 'loc_file': None, 'A_file': None,
+                     'n_cores': 1, 'threshold': 0, 'use_cvae': True, 'use_imputation': False, 'diagnosis': False, 'verbose': True,
+                     'use_fdr': True, 'p_val_cutoff': 0.05, 'fc_cutoff': 1.2, 'pct1_cutoff': 0.3, 'pct2_cutoff': 0.1, 'sortby_fc': True, 'n_marker_per_cmp': 10, 'filter_cell': True, 'filter_gene': True,
+                     'n_hv_gene': 200,  'pseudo_spot_min_cell': 2, 'pseudo_spot_max_cell':8, 'seq_depth_scaler': 10000, 'cvae_input_scaler': 10, 'cvae_init_lr':0.003, 'redo_de': True, 'seed': 383,
+                     'lambda_r': None, 'lambda_r_range_min': 0.1, 'lambda_r_range_max': 100, 'lambda_r_range_k': 8,
+                     'lambda_g': None, 'lambda_g_range_min': 0.1, 'lambda_g_range_max': 100, 'lambda_g_range_k': 8,
+                     'diameter': 200, 'impute_diameter': [160, 114, 80]
+                    }
 
 
 
@@ -32,41 +45,87 @@ def usage():
     None.
     '''
     
-    print('''
+    print(f'''
 runDeconvolution [option][value]...
+
     -h or --help            print this help messages.
-    -q or --query           input csv file of raw nUMI counts in spatial transcriptomic data (spots * genes), with absolute or relative path. Rows as spots and columns as genes. Row header as spot barcodes and column header as gene symbols are required.
-    -r or --ref             input csv file of raw nUMI counts in scRNA-seq data (cells * genes), with absolute or relative path. Rows as cells and columns as genes. Row header as cell barcodes and column header as gene symbols are required.
-    -c or --ref_anno        input csv file of cell-type annotations for all cells in scRNA-seq data, with absolute or relative path. Rows as cells and only 1 column as cell-type annotation. Row header as cell barcodes and column header as cell-types are required.
-    -m or --marker          input csv file of already curated cell-type marker gene expression (cell-types * genes; already normalized to remove effect of sequencing depth), with absolute or relative path. Rows as cell-types and columns as genes. Row header as cell-type names and column header as gene symbols are required. If marker gene expression is provided, the built-in differential analysis will be skipped and genes from this csv file will be directly used for cell-type deconvolution, as well as CVAE building if needed. If not provided, Wilcoxon rank sum test will be performed to select cell-type marker genes.
-    -l or --loc             input csv file of row/column integer index (x,y) of spatial spots (spots * 2), with absolute or relative path. Rows as spots and columns are coordinates x (column index) and y (row index). Row header as spot barcodes and column header "x","y" are both required. NOTE 1) the column header must be either "x" or "y" (lower case), 2) x and y are integer index (1,2,3,...) not pixels. This spot location file is required for imputation.
-    -a or --adjacency       input csv file of Adjacency Matrix of spots in spatial transcriptomic data (spots * spots), with absolute or relative path. In the Adjacency Matrix, spots within neighborhood have a value 1, otherwises have a value 0, and diagonal entries are all 0. Row header and column header as spot barcodes are required. And the spot order should be consist with row order in spatial data. Default value is None.
-    -n or --n_cores         number of CPU cores used for parallel computing. Default value is 1, i.e. no parallel computing.
-    --lambda_r              hyper-parameter for Adaptive Lasso. Default value is None, i.e. use cross-validation to find the optimal value. The list of lambda_r candidates will has total lambda_r_range_k values, and candidate values will be evenly selected on a log scale (geometric progression) from range [lambda_r_range_min, lambda_r_range_max]. If lambda_r is specified as a valid value, then lambda_r_range_k, lambda_r_range_min and lambda_r_range_max will be ignored.
-    --lambda_r_range_min    minimum value of the range of lambda_r candidates used for hyper-parameter selection. Default value is 0.1.
-    --lambda_r_range_max    maximum value of the range of lambda_r candidates used for hyper-parameter selection. Default value is 100.
-    --lambda_r_range_k      number of lambda_r candidates used for hyper-parameter selection. Default value is 8 (including the values of lambda_r_range_min and lambda_r_range_max).
-    --lambda_g              hyper-parameter for Graph Laplacian Constrain, which equals the edge weights used in the Graph created from the Adjacency Matrix. Default value is None, i.e. use cross-validation to find the optimal value. The list of lambda_g candidates will has total lambda_g_range_k values, and candidate values will be evenly selected on a log scale (geometric progression) from range [lambda_g_range_min, lambda_g_range_max]. If lambda_g is specified as a valid value, then lambda_g_range_k, lambda_g_range_min and lambda_g_range_max will be ignored.
-    --lambda_g_range_min    minimum value of the range of lambda_g candidates used for hyper-parameter selection. Default value is 0.1.
-    --lambda_g_range_max    maximum value of the range of lambda_g candidates used for hyper-parameter selection. Default value is 100.
-    --lambda_g_range_k      number of lambda_g candidates used for hyper-parameter selection. Default value is 8 (including the values of lambda_g_range_min and lambda_g_range_max).
-    --use_cvae              control whether to build Conditional Variational Autoencoder (CVAE) to adjust the platform effect between spatial transcriptomic and scRNA-seq (true/false). Default value is true. Building CVAE requires raw nUMI counts and corresponding cell-type annotation of scRNA-seq data specified.
-    --threshold             threshold for hard thresholding the estimated cell-type proportions, i.e. for one spot, estimated cell-type proportions smaller than this threshold value will be set to 0 , then re-normalize all proportions of this spot to sum as 1. Default value is 0, which means no hard thresholding.
-    --n_hv_gene             number of highly variable genes identified in scRNA-seq data and then used for building CVAE. Default number is 1,000. If the actual number of genes in scRNA-seq data is less than the specified value, all genes in scRNA-seq data will be used for CVAE.
-    --n_marker_per_cmp      number of selected TOP cell-type specified marker genes for each comparison of ONE cell-type against another ONE cell-type using Wilcoxon rank sum test. Default number is 30. For each comparison, genes with a FDR adjusted p value < 0.05 will be selected first, then these marker genes will be sorted by a combined rank of log fold change and pct.1/pct.2, and finally pick up specified number of gene with TOP ranks.
-    --pseudo_spot_min_cell  minimum value of cells in one pseudo-spot for building CVAE. Default value is 2.
-    --pseudo_spot_max_cell  maximum value of cells in one pseudo-spot for building CVAE. Default value is 8.
-    --seq_depth_scaler      a scaler of scRNA-seq sequencing depth to transform sequencing depth normalized gene expressions back to raw nUMI after CVAE transformation. Default value is 10,000 for all cells.
-    --cvae_input_scaler     maximum value of the scaled input for CVAE input layer. Default value is 10, i.e. scale all the sequencing depth normalized gene expressions to range [0, 10].
-    --cvae_init_lr          initial learning rate for training CVAE. Default value is 0.003. Althoug learning rate will decreasing automatically during training, large initial learning rate will cause training failure at the very beginning of training. If loss function value do NOT monotonically decrease, please try smaller initial learning rate.
-    --redo_de               control whether to redo Differential analysis on CVAE transformed scRNA-seq gene expression to get a new set of marker gene list for cell-types (true/false). Default value is true. It's recommended to redo Differential analysis since CVAE transformation may change the marker gene profile of cell-types.
-    --seed                  seed value for random in building CVAE. Default value is 383.
-    --diagnosis             if true, provide more outputs related to CVAE and hyper-parameter selection for diagnosis. Default value is false.
-    --verbose               control whether to print more info of ADMM during program running (true/false). Default value is true.
-    -v or --version         print version of CVAE-GLRM
-    --use_imputation        control whether to perform imputation (true/false). Default value is false. Imputation requires the spot diameter (µm) at higher resolution to be specified.
-    --diameter              the physical diameter (µm) of spatial spots. Default value is 200.
-    --impute_diameter       the target spot diameter (µm) during imputation. Either one number or an array of numbers separated by "," are supported. Default value is 160,114,80, corresponding to the low, medium, high resolution.
+    -v or --version         print version of SDePER
+    
+    
+    --------------- Input options -------------------
+    
+    -q or --query           input csv file of raw nUMI counts of spatial transcriptomic data (spots * genes), with absolute or relative path. Rows as spots and columns as genes. Row header as spot barcodes and column header as gene symbols are both required.
+    -r or --ref             input csv file of raw nUMI counts of scRNA-seq data (cells * genes), with absolute or relative path. Rows as cells and columns as genes. Row header as cell barcodes and column header as gene symbols are both required.
+    -c or --ref_anno        input csv file of cell-type annotations for all cells in scRNA-seq data, with absolute or relative path. Rows as cells and only 1 column as cell-type annotation. Row header as cell barcodes and column header with arbitrary name are both required.
+    -m or --marker          input csv file of already curated cell-type marker gene expression (cell-types * genes; already normalized by sequencing depth), with absolute or relative path. Rows as cell-types and columns as genes. Row header as cell-type names and column header as gene symbols are both required. If marker gene expression is provided, the built-in differential analysis will be skipped and genes from this csv file will be directly used for cell-type deconvolution, as well as CVAE building. If not provided, Wilcoxon rank sum test will be performed to select cell-type marker genes. Default value is {default_paramdict["marker_file"]}.
+    -l or --loc             input csv file of row/column integer index (x,y) of spatial spots (spots * 2), with absolute or relative path. Rows as spots and columns are coordinates x (column index) and y (row index). Row header as spot barcodes and column header "x","y" are both required. NOTE 1) the column header must be either "x" or "y" (lower case), 2) x and y are integer index (1,2,3,...) not pixels. This spot location file is required for imputation. Default value is {default_paramdict["loc_file"]}.
+    -a or --adjacency       input csv file of Adjacency Matrix of spots in spatial transcriptomic data (spots * spots), with absolute or relative path. In Adjacency Matrix, entry value 1 represents corresponding two spots are adjacent spots according to the definition of neighborhood, while value 0 for non-adjacent spots. All diagonal entries are set as 0. Row header and column header as spot barcodes are both required. And the spot order should be consist with row order in spatial data. Default value is {default_paramdict["A_file"]}.
+    
+    
+    --------------- Output options -------------------
+    
+    We do not provide options for renaming output files. All outputs are in the same folder as input files.
+    The cell-type deconvolution result file is named as "celltype_proportions.csv".
+    If imputation is enabled, for each specified spot diameter d µm, there will be three more output files: 1) imputed spot locations "impute_diameter_d_spot_loc.csv", 2) imputed spot cell-type proportions "impute_diameter_d_spot_celltype_prop.csv", 3) imputed spot gene expressions (already normalized by sequencing depth of spots) "impute_diameter_d_spot_gene_norm_exp.csv".
+    
+    
+    --------------- General options -------------------
+    
+    -n or --n_cores         number of CPU cores used for parallel computing. Default value is {default_paramdict["n_cores"]}, i.e. no parallel computing.
+    --threshold             threshold for hard thresholding the estimated cell-type proportions, i.e. for one spot, estimated cell-type proportions smaller than this threshold value will be set to 0, then re-normalize all proportions of this spot to sum as 1. Default value is {default_paramdict["threshold"]}, which means no hard thresholding.
+    --use_cvae              control whether to build Conditional Variational Autoencoder (CVAE) to remove the platform effect between spatial transcriptomic and scRNA-seq data (true/false). Default value is {default_paramdict["use_cvae"]}. Building CVAE requires raw nUMI counts and corresponding cell-type annotation of scRNA-seq data specified.
+    --use_imputation        control whether to perform imputation (true/false). Default value is {default_paramdict["use_imputation"]}. Imputation requires the spot diameter (µm) at higher resolution to be specified.
+    --diagnosis             if true, provide more output files related to CVAE building and hyper-parameter selection for diagnosis. Default value is {default_paramdict["diagnosis"]}.
+    --verbose               control whether to print more info such as output of each ADMM iteration step during program running (true/false). Default value is {default_paramdict["verbose"]}.
+    
+    
+    ----- Cell-type marker identification options ------
+    
+    Cell-type specific markers are identified by Differential analysis (DE) across cell-types in reference scRNA-seq data. We also perform cell and/or gene filtering before DE. Each time we ONLY compare the normalized gene expression (raw nUMI counts divided by sequencing depth) one cell-type (1st) vs another one cell-type (2nd) using Wilcoxon Rank Sum Test, then take the UNION of all identified markers for downstream analysis. We filter the marker genes with pre-set thresholds of p value (or FDR), fold change, pct.1 (percentage of cells expressed this marker in 1st cell-type) and pct.2 (percentage of cells expressed this marker in 2nd cell-type). Next we sort the marker genes by p value (or FDR) or fold change, and select the TOP ones. The options related to cell-type marker identification are listed as below:
+    
+    --use_fdr               whether to use FDR adjusted p value for filtering and sorting. Default value is {default_paramdict["use_fdr"]}, i.e. use FDR adjusted p value. If false orginal p value will be used instead.
+    --p_val_cutoff          threshold of p value (or FDR if `--use_fdr` is true) in marker genes filtering. Default value is {default_paramdict["p_val_cutoff"]}, and only genes with p value (or FDR if `--use_fdr` is true) <= {default_paramdict["p_val_cutoff"]} will be kept.
+    --fc_cutoff             threshold of fold change (without log transform!) in marker genes filtering. Default value is {default_paramdict["fc_cutoff"]}, and only genes with fold change >= {default_paramdict["fc_cutoff"]} will be kept.
+    --pct1_cutoff           threshold of pct.1 (percentage of cells expressed this marker in 1st cell-type) in marker genes filtering. Default value is {default_paramdict["pct1_cutoff"]}, and only genes with pct.1 >= {default_paramdict["pct1_cutoff"]} will be kept.
+    --pct2_cutoff           threshold of pct.2 (percentage of cells expressed this marker in 2nd cell-type) in marker genes filtering. Default value is {default_paramdict["pct2_cutoff"]}, and only genes with pct.2 <= {default_paramdict["pct2_cutoff"]} will be kept.
+    --sortby_fc             whether to sort marker genes by fold change. Default value is {default_paramdict["sortby_fc"]}, i.e. sort marker genes by fold change then select TOP ones. If false, p value (or FDR if `--use_fdr` is true) will be used to sort marker genes instead.
+    --n_marker_per_cmp      number of selected TOP marker genes for each comparison of ONE cell-type against another ONE cell-type using Wilcoxon Rank Sum Test. Default number is {default_paramdict["n_marker_per_cmp"]}. For each comparison, genes passing filtering will be selected first, then these marker genes will be sorted by fold change or p value (or FDR), and finally pick up specified number of genes with TOP ranks. If the number of available genes is less than the specified number, a WARNING will be shown in the program running log file.
+    --filter_cell           whether to filter cells with <200 genes for reference scRNA-seq data before differential analysis. Default value is {default_paramdict["filter_cell"]}, i.e. filter cells first.
+    --filter_gene           whether to filter genes presented in <10 cells for reference scRNA-seq data and <3 spots for spatial data before differential analysis. Default value is {default_paramdict["filter_gene"]}, i.e. filter genes first.
+    
+    
+    --------------- CVAE related options ---------------
+    
+    We build Conditional Variational Autoencoder (CVAE) to adjust the platform effect between spatial transcriptomic and scRNA-seq data. The input of CVAE includes scRNA-seq cells, pseudo-spots generated by aggregating randomly selected cells and real spatial spots. To successfully train a neural network model is non-trivial, and model Topology together with most related hyper-parameters have been pre-fixed based on our experiences on analysis of various spatial transcriptomic datasets. The options can be tuned by users are listed as below:
+    
+    --n_hv_gene             number of highly variable genes identified in reference scRNA-seq data, and these HV genes will be used together with identified cell-type marker genes for building CVAE. Default number is {default_paramdict["n_hv_gene"]}. If the actual number of genes in scRNA-seq data is less than the specified value, all available genes in scRNA-seq data will be used for building CVAE.
+    --pseudo_spot_min_cell  minimum value of cells in one pseudo-spot when combining cells into pseudo-spots. Default value is {default_paramdict["pseudo_spot_min_cell"]}.
+    --pseudo_spot_max_cell  maximum value of cells in one pseudo-spot when combining cells into pseudo-spots. Default value is {default_paramdict["pseudo_spot_max_cell"]}.
+    --seq_depth_scaler      a scaler of scRNA-seq sequencing depth to transform CVAE decoded values (sequencing depth normalized gene expressions) back to raw nUMI counts. Default value is {default_paramdict["seq_depth_scaler"]} for all cells.
+    --cvae_input_scaler     maximum value of the scaled input for CVAE input layer. Default value is {default_paramdict["cvae_input_scaler"]}, i.e. linearly scale all the sequencing depth normalized gene expressions to range [0, {default_paramdict["cvae_input_scaler"]}].
+    --cvae_init_lr          initial learning rate for training CVAE. Default value is {default_paramdict["cvae_init_lr"]}. Although learning rate will decreasing automatically during training, large initial learning rate will cause training failure at the very beginning of training. If loss function value do NOT monotonically decrease, please try smaller initial learning rate.
+    --redo_de               control whether to redo Differential analysis on CVAE transformed scRNA-seq gene expressions to get a new set of marker gene list of cell-types (true/false). Default value is {default_paramdict["redo_de"]}. It's recommended to redo Differential analysis since CVAE transformation may change the marker gene profile of cell-types.
+    --seed                  seed value of TensorFlow to control the randomness in building CVAE. Default value is {default_paramdict["seed"]}.
+    
+    
+    -------------- GLRM hyper-parameter related options ---------------
+    
+    We incorporate adaptive Lasso penalty and graph Laplacian penalty in GLRM, and use the hyper-parameters lambda_r and lambda_g to balance the strength of those two penalties respectively.
+    
+    --lambda_r              hyper-parameter for adaptive Lasso. Default value is {default_paramdict["lambda_r"]}, i.e. use cross-validation to find the optimal value. The list of lambda_r candidates will has total `lambda_r_range_k` values, and candidate values will be evenly selected on a log scale (geometric progression) from range [`lambda_r_range_min`, `lambda_r_range_max`]. If `lambda_r` is specified as a valid value, then `lambda_r_range_k`, `lambda_r_range_min` and `lambda_r_range_max` will be ignored.
+    --lambda_r_range_min    minimum value of the range of lambda_r candidates used for hyper-parameter selection. Default value is {default_paramdict["lambda_r_range_min"]}.
+    --lambda_r_range_max    maximum value of the range of lambda_r candidates used for hyper-parameter selection. Default value is {default_paramdict["lambda_r_range_max"]}.
+    --lambda_r_range_k      number of lambda_r candidates used for hyper-parameter selection. Default value is {default_paramdict["lambda_r_range_k"]} (including the values of `lambda_r_range_min` and `lambda_r_range_max`).
+    --lambda_g              hyper-parameter for graph Laplacian constrain, which depends on the edge weights used in the graph created from the Adjacency Matrix. Default value is {default_paramdict["lambda_g"]}, i.e. use cross-validation to find the optimal value. The list of lambda_g candidates will has total `lambda_g_range_k` values, and candidate values will be evenly selected on a log scale (geometric progression) from range [`lambda_g_range_min`, `lambda_g_range_max`]. If `lambda_g` is specified as a valid value, then `lambda_g_range_k`, `lambda_g_range_min` and `lambda_g_range_max` will be ignored.
+    --lambda_g_range_min    minimum value of the range of lambda_g candidates used for hyper-parameter selection. Default value is {default_paramdict["lambda_g_range_min"]}.
+    --lambda_g_range_max    maximum value of the range of lambda_g candidates used for hyper-parameter selection. Default value is {default_paramdict["lambda_g_range_max"]}.
+    --lambda_g_range_k      number of lambda_g candidates used for hyper-parameter selection. Default value is {default_paramdict["lambda_g_range_k"]} (including the values of `lambda_g_range_min` and `lambda_g_range_max`).
+    
+    
+    -------------- imputation related options ---------------
+    
+    --diameter              the physical diameter (µm) of spatial spots. Default value is {default_paramdict["diameter"]}.
+    --impute_diameter       the target spot diameter (µm) during imputation. Either one number or an array of numbers separated by "," are supported. Default value is {",".join([str(x) for x in default_paramdict["impute_diameter"]])}, corresponding to the low, medium, high resolution.
 ''')
 
 
@@ -82,30 +141,38 @@ def parseOpt():
     -------
     paramdict : Dict
         parsed command line parameters for model, including:
-            spatial_file : full file path of spatial transcriptomic data
-            ref_file : full file path of scRNA-seq data
-            ref_celltype_file : full file path of the corresponding cell-type annotation of scRNA-seq data
-            marker_file : full file path of user curated cell-type marker gene expression
-            loc_file : full file path of spot locations in spatial transcriptomic data
-            A_file : full file path Adjacency Matrix of spots in spatial transcriptomic data
-            n_cores : number of CPU cores used for parallel computing
-            lambda_r : hyper-parameter for Adaptive Lasso
-            lambda_g : hyper-parameter for graph weight, affecting the Laplacian Matrix
-            use_cvae : whether to build CVAE
-            threshold : threshold for hard thresholding estimated cell-type proportion theta
-            n_hv_gene : number of highly variable genes for CVAE
-            n_marker_per_cmp : number of TOP marker genes for each comparison in DE
-            pseudo_spot_min_cell : minimum value of cells in pseudo-spot
-            pseudo_spot_max_cell : maximum value of cells in pseudo-spot
-            seq_depth_scaler : a scaler of scRNA-seq sequencing depth
-            cvae_input_scaler : maximum value of the scaled input for CVAE
-            cvae_init_lr : initial learning rate for training CVAE
-            redo_de : whether to redo DE after CVAE transformation
-            seed : seed value for random in building CVAE
-            diagnosis : True or False, if True save more information to files for diagnosis CVAE and hyper-parameter selection
-            verbose : True or False, if True print more information during program running
-            use_imputation : whether to perform imputation
-            diameter : the physical diameter of spatial spots
+            spatial_file : full file path of spatial transcriptomic data\n
+            ref_file : full file path of scRNA-seq data\n
+            ref_celltype_file : full file path of the corresponding cell-type annotation of scRNA-seq data\n
+            marker_file : full file path of user curated cell-type marker gene expression\n
+            loc_file : full file path of spot locations in spatial transcriptomic data\n
+            A_file : full file path Adjacency Matrix of spots in spatial transcriptomic data\n
+            n_cores : number of CPU cores used for parallel computing\n
+            lambda_r : hyper-parameter for Adaptive Lasso\n
+            lambda_g : hyper-parameter for graph weight, affecting the Laplacian Matrix\n
+            use_cvae : whether to build CVAE\n
+            threshold : threshold for hard thresholding estimated cell-type proportion theta\n
+            n_hv_gene : number of highly variable genes for CVAE\n
+            n_marker_per_cmp : number of TOP marker genes for each comparison in DE\n
+            pseudo_spot_min_cell : minimum value of cells in pseudo-spot\n
+            pseudo_spot_max_cell : maximum value of cells in pseudo-spot\n
+            seq_depth_scaler : a scaler of scRNA-seq sequencing depth\n
+            cvae_input_scaler : maximum value of the scaled input for CVAE\n
+            cvae_init_lr : initial learning rate for training CVAE\n
+            redo_de : whether to redo DE after CVAE transformation\n
+            seed : seed value for random in building CVAE\n
+            diagnosis : True or False, if True save more information to files for diagnosis CVAE and hyper-parameter selection\n
+            verbose : True or False, if True print more information during program running\n
+            use_fdr : whether to use FDR adjusted p value for filtering and sorting\n
+            p_val_cutoff : threshold of p value (or FDR if --use_fdr is true) in marker genes filtering\n
+            fc_cutoff : threshold of fold change (without log transform!) in marker genes filtering\n
+            pct1_cutoff : threshold of pct.1 in marker genes filtering\n
+            pct2_cutoff : threshold of pct.2 in marker genes filtering\n
+            sortby_fc : whether to sort marker genes by fold change\n
+            filter_cell : whether to filter cells before DE\n
+            filter_gene : whether to filter genes before DE\n
+            use_imputation : whether to perform imputation\n
+            diameter : the physical diameter of spatial spots\n
             impute_diameter : target spot diameter for imputation
     '''
     
@@ -119,7 +186,7 @@ def parseOpt():
     # 短选项名后的冒号(:)表示该选项必须有附加的参数
     # 长选项名后的等号(=)表示该选项必须有附加的参数
     shortargs = 'hq:r:c:m:l:a:o:n:v'
-    longargs = ['help', 'query=', 'ref=', 'ref_anno=', 'marker=', 'loc=', 'adjacency=', 'n_cores=', 'lambda_r=', 'lambda_r_range_min=', 'lambda_r_range_max=', 'lambda_r_range_k=', 'lambda_g=', 'lambda_g_range_min=', 'lambda_g_range_max=', 'lambda_g_range_k=', 'use_cvae=', 'threshold=', 'n_hv_gene=', 'n_marker_per_cmp=', 'pseudo_spot_min_cell=', 'pseudo_spot_max_cell=', 'seq_depth_scaler=', 'cvae_input_scaler=', 'cvae_init_lr=', 'redo_de=', 'seed=', 'diagnosis=', 'verbose=', 'use_imputation=', 'diameter=', 'impute_diameter=', 'version']
+    longargs = ['help', 'query=', 'ref=', 'ref_anno=', 'marker=', 'loc=', 'adjacency=', 'n_cores=', 'lambda_r=', 'lambda_r_range_min=', 'lambda_r_range_max=', 'lambda_r_range_k=', 'lambda_g=', 'lambda_g_range_min=', 'lambda_g_range_max=', 'lambda_g_range_k=', 'use_cvae=', 'threshold=', 'n_hv_gene=', 'n_marker_per_cmp=', 'pseudo_spot_min_cell=', 'pseudo_spot_max_cell=', 'seq_depth_scaler=', 'cvae_input_scaler=', 'cvae_init_lr=', 'redo_de=', 'seed=', 'diagnosis=', 'verbose=', 'use_fdr=', 'p_val_cutoff=', 'fc_cutoff=', 'pct1_cutoff=', 'pct2_cutoff=', 'sortby_fc=', 'filter_cell=', 'filter_gene=', 'use_imputation=', 'diameter=', 'impute_diameter=', 'version']
     
   
     # 解析命令行参数
@@ -134,7 +201,9 @@ def parseOpt():
         sys.exit(1)
         
     # 定义dict类型的参数集，使得程序更稳健
-    paramdict = {'spatial_file': None, 'ref_file': None, 'ref_celltype_file': None, 'marker_file': None, 'loc_file': None, 'A_file': None, 'n_cores': 1, 'lambda_r': None, 'lambda_r_range_min': 0.1, 'lambda_r_range_max': 100, 'lambda_r_range_k': 8, 'lambda_g': None, 'lambda_g_range_min': 0.1, 'lambda_g_range_max': 100, 'lambda_g_range_k': 8, 'use_cvae': True, 'threshold': 0, 'n_hv_gene': 1000, 'n_marker_per_cmp': 30, 'pseudo_spot_min_cell': 2, 'pseudo_spot_max_cell':8, 'seq_depth_scaler': 10000, 'cvae_input_scaler': 10, 'cvae_init_lr':0.003, 'redo_de': True, 'seed': 383, 'diagnosis': False, 'verbose': True, 'use_imputation': False, 'diameter': 200, 'impute_diameter': [160, 114, 80]}
+    # a deep copy
+    paramdict = copy.deepcopy(default_paramdict)
+    
     
     for opt,val in opts:
         
@@ -217,10 +286,10 @@ def parseOpt():
                     paramdict['n_cores'] = os.cpu_count()
                 
                 if paramdict['n_cores'] < 1:
-                    print(f'WARNING: invalid option value `{paramdict["n_cores"]}` for CPU cores! Please use integer which >= 1. Currently CPU cores is set to be default value `1`')
-                    paramdict['n_cores'] = 1
+                    print(f'WARNING: invalid option value `{paramdict["n_cores"]}` for CPU cores! Please use integer which >= 1. Currently CPU cores is set to be default value `{default_paramdict["n_cores"]}`')
+                    paramdict['n_cores'] = default_paramdict["n_cores"]
             except:
-                print(f'WARNING: unrecognized option value `{val}` for CPU cores! Please use numeric value. Currently CPU cores is set to be default value `1`!')
+                print(f'WARNING: unrecognized option value `{val}` for CPU cores! Please use numeric value. Currently CPU cores is set to be default value `{default_paramdict["n_cores"]}`!')
             continue
         
     
@@ -233,10 +302,10 @@ def parseOpt():
                     paramdict['lambda_r'] = float(val)
                     
                     if paramdict['lambda_r'] < 0:
-                        print(f'WARNING: negative option value `{paramdict["lambda_r"]}` for lambda_r! Please use non-negative value. Currently lambda_r is set to be default value `None`!')
-                        paramdict['lambda_r'] = None
+                        print(f'WARNING: negative option value `{paramdict["lambda_r"]}` for lambda_r! Please use non-negative value. Currently lambda_r is set to be default value `{default_paramdict["lambda_r"]}`!')
+                        paramdict['lambda_r'] = default_paramdict["lambda_r"]
                 except:
-                    print(f'WARNING: unrecognized option value `{val}` for lambda_r! Please use numeric value or `none`. Currently lambda_r is set to be default value `None`!')
+                    print(f'WARNING: unrecognized option value `{val}` for lambda_r! Please use numeric value or `none`. Currently lambda_r is set to be default value `{default_paramdict["lambda_r"]}`!')
                 continue
             
             
@@ -244,11 +313,11 @@ def parseOpt():
             try:
                 paramdict['lambda_r_range_min'] = float(val)
                 
-                if paramdict['lambda_r_range_min'] <= 0:
-                    print(f'WARNING: non-positive option value `{paramdict["lambda_r_range_min"]}` for lambda_r_range_min! Please use positve value. Currently lambda_r_range_min is set to be default value `0.1`!')
-                    paramdict['lambda_r_range_min'] = 0.1
+                if paramdict['lambda_r_range_min'] < 0:
+                    print(f'WARNING: negative option value `{paramdict["lambda_r_range_min"]}` for lambda_r_range_min! Please use non-negative value. Currently lambda_r_range_min is set to be value `0`!')
+                    paramdict['lambda_r_range_min'] = 0
             except:
-                print(f'WARNING: unrecognized option value `{val}` for lambda_r_range_min! Please use numeric value. Currently lambda_r_range_min is set to be default value `0.1`!')
+                print(f'WARNING: unrecognized option value `{val}` for lambda_r_range_min! Please use numeric value. Currently lambda_r_range_min is set to be default value `{default_paramdict["lambda_r_range_min"]}`!')
             continue
         
         
@@ -257,7 +326,7 @@ def parseOpt():
                 paramdict['lambda_r_range_max'] = float(val)
                 # checking max value in the final check
             except:
-                print(f'WARNING: unrecognized option value `{val}` for lambda_r_range_max! Please use numeric value. Currently lambda_r_range_max is set to be default value `100`!')
+                print(f'WARNING: unrecognized option value `{val}` for lambda_r_range_max! Please use numeric value. Currently lambda_r_range_max is set to be default value `{default_paramdict["lambda_r_range_max"]}`!')
             continue
         
         
@@ -269,7 +338,7 @@ def parseOpt():
                     print(f'WARNING: option value `{paramdict["lambda_r_range_k"]}` for lambda_r_range_k < 1! Please use integer which >= 1. Currently lambda_r_range_k is set to be value `1`!')
                     paramdict['lambda_r_range_k'] = 1
             except:
-                print(f'WARNING: unrecognized option value `{val}` for lambda_r_range_k! Please use numeric value. Currently lambda_r_range_k is set to be default value `8`!')
+                print(f'WARNING: unrecognized option value `{val}` for lambda_r_range_k! Please use numeric value. Currently lambda_r_range_k is set to be default value `{default_paramdict["lambda_r_range_k"]}`!')
             continue
     
         
@@ -282,8 +351,8 @@ def parseOpt():
                     paramdict['lambda_g'] = float(val)
                     
                     if paramdict['lambda_g'] < 0:
-                        print(f'WARNING: negative option value `{paramdict["lambda_g"]}` for lambda_g! Please use non-negative value. Currently lambda_g is set to be default value `None`!')
-                        paramdict['lambda_g'] = None
+                        print(f'WARNING: negative option value `{paramdict["lambda_g"]}` for lambda_g! Please use non-negative value. Currently lambda_g is set to be default value `{default_paramdict["lambda_g"]}`!')
+                        paramdict['lambda_g'] = default_paramdict["lambda_g"]
                 except:
                     print(f'WARNING: unrecognized option value `{val}` for lambda_g! Please use numeric value or `none`. Currently lambda_g is set to be default value `None`!')
                 continue
@@ -293,11 +362,11 @@ def parseOpt():
             try:
                 paramdict['lambda_g_range_min'] = float(val)
                 
-                if paramdict['lambda_g_range_min'] <= 0:
-                    print(f'WARNING: non-positive option value `{paramdict["lambda_g_range_min"]}` for lambda_g_range_min! Please use positve value. Currently lambda_g_range_min is set to be default value `0.1`!')
-                    paramdict['lambda_g_range_min'] = 0.1
+                if paramdict['lambda_g_range_min'] < 0:
+                    print(f'WARNING: negative option value `{paramdict["lambda_g_range_min"]}` for lambda_g_range_min! Please use non-negative value. Currently lambda_g_range_min is set to be value `0`!')
+                    paramdict['lambda_g_range_min'] = 0
             except:
-                print(f'WARNING: unrecognized option value `{val}` for lambda_g_range_min! Please use numeric value. Currently lambda_g_range_min is set to be default value `0.1`!')
+                print(f'WARNING: unrecognized option value `{val}` for lambda_g_range_min! Please use numeric value. Currently lambda_g_range_min is set to be default value `{default_paramdict["lambda_g_range_min"]}`!')
             continue
         
         
@@ -306,7 +375,7 @@ def parseOpt():
                 paramdict['lambda_g_range_max'] = float(val)
                 # checking max value in the final check
             except:
-                print(f'WARNING: unrecognized option value `{val}` for lambda_g_range_max! Please use numeric value. Currently lambda_g_range_max is set to be default value `100`!')
+                print(f'WARNING: unrecognized option value `{val}` for lambda_g_range_max! Please use numeric value. Currently lambda_g_range_max is set to be default value `{default_paramdict["lambda_g_range_max"]}`!')
             continue
         
         
@@ -318,7 +387,7 @@ def parseOpt():
                     print(f'WARNING: option value `{paramdict["lambda_g_range_k"]}` for lambda_g_range_k < 1! Please use integer which >= 1. Currently lambda_g_range_k is set to be value `1`!')
                     paramdict['lambda_g_range_k'] = 1
             except:
-                print(f'WARNING: unrecognized option value `{val}` for lambda_g_range_k! Please use numeric value. Currently lambda_g_range_k is set to be default value `8`!')
+                print(f'WARNING: unrecognized option value `{val}` for lambda_g_range_k! Please use numeric value. Currently lambda_g_range_k is set to be default value `{default_paramdict["lambda_g_range_k"]}`!')
             continue
         
         
@@ -328,7 +397,7 @@ def parseOpt():
             elif val.casefold() == 'false'.casefold():
                 paramdict['use_cvae'] = False
             else:
-                print(f'WARNING: unrecognized option value `{val}` for use_cvae! Please use string of true or false. Currently use_cvae is set to be default value `True`!')
+                print(f'WARNING: unrecognized option value `{val}` for use_cvae! Please use string of true or false. Currently use_cvae is set to be default value `{default_paramdict["use_cvae"]}`!')
             continue
         
         
@@ -340,7 +409,7 @@ def parseOpt():
                     print(f'WARNING: negative option value `{paramdict["threshold"]}` for thoreshold! Please use non-negative value. Currently threshold is set to be default value `0`!')
                     paramdict['threshold'] = 0
             except:
-                print(f'WARNING: unrecognized option value `{val}` for threshold! Please use numeric value. Currently threshold is set to be default value `0`!')
+                print(f'WARNING: unrecognized option value `{val}` for threshold! Please use numeric value. Currently threshold is set to be default value `{default_paramdict["threshold"]}`!')
             continue
         
         
@@ -349,10 +418,10 @@ def parseOpt():
                 paramdict['n_hv_gene'] = int(float(val))
                 
                 if paramdict['n_hv_gene'] < 0:
-                    print(f'WARNING: negative option value `{paramdict["n_hv_gene"]}` for n_hv_gene! Please use non-negative integer. Currently n_hv_gene is set to be default value `1,000`!')
-                    paramdict['n_hv_gene'] = 1000
+                    print(f'WARNING: negative option value `{paramdict["n_hv_gene"]}` for n_hv_gene! Please use non-negative integer. Currently n_hv_gene is set to be default value `{default_paramdict["n_hv_gene"]}`!')
+                    paramdict['n_hv_gene'] = default_paramdict["n_hv_gene"]
             except:
-                print(f'WARNING: unrecognized option value `{val}` for n_hv_gene! Please use numeric value. Currently n_hv_gene is set to be default value `1,000`!')
+                print(f'WARNING: unrecognized option value `{val}` for n_hv_gene! Please use numeric value. Currently n_hv_gene is set to be default value `{default_paramdict["n_hv_gene"]}`!')
             continue
         
         
@@ -361,10 +430,10 @@ def parseOpt():
                 paramdict['n_marker_per_cmp'] = int(float(val))
                 
                 if paramdict['n_marker_per_cmp'] <= 0:
-                    print(f'WARNING: non-positive option value `{paramdict["n_marker_per_cmp"]}` for n_marker_per_cmp! Please use positve integer. Currently n_marker_per_cmp is set to be default value `30`!')
-                    paramdict['n_marker_per_cmp'] = 30
+                    print(f'WARNING: non-positive option value `{paramdict["n_marker_per_cmp"]}` for n_marker_per_cmp! Please use positve integer. Currently n_marker_per_cmp is set to be default value `{default_paramdict["n_marker_per_cmp"]}`!')
+                    paramdict['n_marker_per_cmp'] = default_paramdict["n_marker_per_cmp"]
             except:
-                print(f'WARNING: unrecognized option value `{val}` for n_marker_per_cmp! Please use numeric value. Currently n_marker_per_cmp is set to be default value `30`!')
+                print(f'WARNING: unrecognized option value `{val}` for n_marker_per_cmp! Please use numeric value. Currently n_marker_per_cmp is set to be default value `{default_paramdict["n_marker_per_cmp"]}`!')
             continue
         
         
@@ -373,10 +442,10 @@ def parseOpt():
                 paramdict['pseudo_spot_min_cell'] = int(float(val))
                 
                 if paramdict['pseudo_spot_min_cell'] < 2:
-                    print(f'WARNING: invalid option value `{paramdict["pseudo_spot_min_cell"]}` for pseudo_spot_min_cell! Please use integer which >= 2. Currently pseudo_spot_min_cell is set to be default value `2`!')
+                    print(f'WARNING: invalid option value `{paramdict["pseudo_spot_min_cell"]}` for pseudo_spot_min_cell! Please use integer which >= 2. Currently pseudo_spot_min_cell is set to be value `2`!')
                     paramdict['pseudo_spot_min_cell'] = 2
             except:
-                print(f'WARNING: unrecognized option value `{val}` for pseudo_spot_min_cell! Please use numeric value. Currently pseudo_spot_min_cell is set to be default value `2`!')
+                print(f'WARNING: unrecognized option value `{val}` for pseudo_spot_min_cell! Please use numeric value. Currently pseudo_spot_min_cell is set to be default value `{default_paramdict["pseudo_spot_min_cell"]}`!')
             continue
         
         
@@ -385,7 +454,7 @@ def parseOpt():
                 paramdict['pseudo_spot_max_cell'] = int(float(val))
                 # checking pseudo_spot_max_cell leaves to the final check
             except:
-                print(f'WARNING: unrecognized option value `{val}` for pseudo_spot_max_cell! Please use numeric value. Currently pseudo_spot_max_cell is set to be default value `8`!')
+                print(f'WARNING: unrecognized option value `{val}` for pseudo_spot_max_cell! Please use numeric value. Currently pseudo_spot_max_cell is set to be default value `{default_paramdict["pseudo_spot_max_cell"]}`!')
             continue
         
         
@@ -394,10 +463,10 @@ def parseOpt():
                 paramdict['seq_depth_scaler'] = int(float(val))
                 
                 if paramdict['seq_depth_scaler'] <= 0:
-                    print(f'WARNING: non-positive option value `{paramdict["seq_depth_scaler"]}` for seq_depth_scaler! Please use positve integer. Currently seq_depth_scaler is set to be default value `10,000`!')
-                    paramdict['seq_depth_scaler'] = 10000
+                    print(f'WARNING: non-positive option value `{paramdict["seq_depth_scaler"]}` for seq_depth_scaler! Please use positve integer. Currently seq_depth_scaler is set to be default value `{default_paramdict["seq_depth_scaler"]}`!')
+                    paramdict['seq_depth_scaler'] = default_paramdict["seq_depth_scaler"]
             except:
-                print(f'WARNING: unrecognized option value `{val}` for seq_depth_scaler! Please use numeric value. Currently seq_depth_scaler is set to be default value `10,000`!')
+                print(f'WARNING: unrecognized option value `{val}` for seq_depth_scaler! Please use numeric value. Currently seq_depth_scaler is set to be default value `{default_paramdict["seq_depth_scaler"]}`!')
             continue
         
         
@@ -406,10 +475,10 @@ def parseOpt():
                 paramdict['cvae_input_scaler'] = int(float(val))
                 
                 if paramdict['cvae_input_scaler'] <= 0:
-                    print(f'WARNING: non-positive option value `{paramdict["cvae_input_scaler"]}` for cvae_input_scaler! Please use positve integer. Currently cvae_input_scaler is set to be default value `10`!')
-                    paramdict['cvae_input_scaler'] = 10
+                    print(f'WARNING: non-positive option value `{paramdict["cvae_input_scaler"]}` for cvae_input_scaler! Please use positve integer. Currently cvae_input_scaler is set to be default value `{default_paramdict["cvae_input_scaler"]}`!')
+                    paramdict['cvae_input_scaler'] = default_paramdict["cvae_input_scaler"]
             except:
-                print(f'WARNING: unrecognized option value `{val}` for cvae_input_scaler! Please use numeric value. Currently cvae_input_scaler is set to be default value `10`!')
+                print(f'WARNING: unrecognized option value `{val}` for cvae_input_scaler! Please use numeric value. Currently cvae_input_scaler is set to be default value `{default_paramdict["cvae_input_scaler"]}`!')
             continue
         
         
@@ -418,10 +487,10 @@ def parseOpt():
                 paramdict['cvae_init_lr'] = float(val)
                 
                 if paramdict['cvae_init_lr'] <= 0:
-                    print(f'WARNING: non-positive option value `{paramdict["cvae_init_lr"]}` for cvae_init_lr! Please use positve value. Currently cvae_init_lr is set to be default value `0.003`!')
-                    paramdict['cvae_init_lr'] = 0.003
+                    print(f'WARNING: non-positive option value `{paramdict["cvae_init_lr"]}` for cvae_init_lr! Please use positve value. Currently cvae_init_lr is set to be default value `{default_paramdict["cvae_init_lr"]}`!')
+                    paramdict['cvae_init_lr'] = default_paramdict["cvae_init_lr"]
             except:
-                print(f'WARNING: unrecognized option value `{val}` for cvae_init_lr! Please use numeric value. Currently cvae_init_lr is set to be default value `0.003`!')
+                print(f'WARNING: unrecognized option value `{val}` for cvae_init_lr! Please use numeric value. Currently cvae_init_lr is set to be default value `{default_paramdict["cvae_init_lr"]}`!')
             continue
         
         
@@ -431,7 +500,7 @@ def parseOpt():
             elif val.casefold() == 'false'.casefold():
                 paramdict['redo_de'] = False
             else:
-                print(f'WARNING: unrecognized option value `{val}` for redo_de! Please use string of true or false. Currently redo_de is set to be default value `True`!')
+                print(f'WARNING: unrecognized option value `{val}` for redo_de! Please use string of true or false. Currently redo_de is set to be default value `{default_paramdict["redo_de"]}`!')
             continue
         
         
@@ -439,7 +508,7 @@ def parseOpt():
             try:
                 paramdict['seed'] = int(float(val))
             except:
-                print(f'WARNING: unrecognized option value `{val}` for seed! Please use numeric value. Currently seed is set to be default value `383`!')
+                print(f'WARNING: unrecognized option value `{val}` for seed! Please use numeric value. Currently seed is set to be default value `{default_paramdict["seed"]}`!')
             continue
         
         
@@ -449,7 +518,7 @@ def parseOpt():
             elif val.casefold() == 'false'.casefold():
                 paramdict['diagnosis'] = False
             else:
-                print(f'WARNING: unrecognized option value `{val}` for diagnosis! Please use string of true or false. Currently verbose is set to be default value `False`!')
+                print(f'WARNING: unrecognized option value `{val}` for diagnosis! Please use string of true or false. Currently verbose is set to be default value `{default_paramdict["diagnosis"]}`!')
             continue
         
         
@@ -459,7 +528,95 @@ def parseOpt():
             elif val.casefold() == 'false'.casefold():
                 paramdict['verbose'] = False
             else:
-                print(f'WARNING: unrecognized option value `{val}` for verbose! Please use string of true or false. Currently verbose is set to be default value `True`!')
+                print(f'WARNING: unrecognized option value `{val}` for verbose! Please use string of true or false. Currently verbose is set to be default value `{default_paramdict["verbose"]}`!')
+            continue
+        
+        
+        if opt in ('--use_fdr'):
+            if val.casefold() == 'true'.casefold():
+                paramdict['use_fdr'] = True
+            elif val.casefold() == 'false'.casefold():
+                paramdict['use_fdr'] = False
+            else:
+                print(f'WARNING: unrecognized option value `{val}` for use_fdr! Please use string of true or false. Currently use_fdr is set to be default value `{default_paramdict["use_fdr"]}`!')
+            continue
+        
+        
+        if opt in ('--p_val_cutoff'):
+            try:
+                paramdict['p_val_cutoff'] = float(val)
+                
+                if paramdict['p_val_cutoff'] < 0:
+                    print(f'WARNING: negative option value `{paramdict["p_val_cutoff"]}` for p_val_cutoff! Please use non-negative value. Currently p_val_cutoff is set to be default value `{default_paramdict["p_val_cutoff"]}`!')
+                    paramdict['p_val_cutoff'] = default_paramdict["p_val_cutoff"]
+            except:
+                print(f'WARNING: unrecognized option value `{val}` for p_val_cutoff! Please use numeric value. Currently p_val_cutoff is set to be default value `{default_paramdict["p_val_cutoff"]}`!')
+            continue
+        
+        
+        if opt in ('--fc_cutoff'):
+            try:
+                paramdict['fc_cutoff'] = float(val)
+                
+                if paramdict['fc_cutoff'] < 1:
+                    print(f'WARNING: option value `{paramdict["fc_cutoff"]}` for fc_cutoff < 1! Please use a value >= 1. Currently fc_cutoff is set to be value `1`!')
+                    paramdict['fc_cutoff'] = 1
+            except:
+                print(f'WARNING: unrecognized option value `{val}` for fc_cutoff! Please use numeric value. Currently fc_cutoff is set to be default value `{default_paramdict["fc_cutoff"]}`!')
+            continue
+        
+        
+        if opt in ('--pct1_cutoff'):
+            try:
+                paramdict['pct1_cutoff'] = float(val)
+                
+                if paramdict['pct1_cutoff'] > 1:
+                    print(f'WARNING: option value `{paramdict["pct1_cutoff"]}` for pct1_cutoff > 1! Please use a value <= 1. Currently pct1_cutoff is set to be default value `{default_paramdict["pct1_cutoff"]}`!')
+                    paramdict['pct1_cutoff'] = default_paramdict["pct1_cutoff"]
+            except:
+                print(f'WARNING: unrecognized option value `{val}` for pct1_cutoff! Please use numeric value. Currently pct1_cutoff is set to be default value `{default_paramdict["pct1_cutoff"]}`!')
+            continue
+        
+        
+        if opt in ('--pct2_cutoff'):
+            try:
+                paramdict['pct2_cutoff'] = float(val)
+                
+                if paramdict['pct2_cutoff'] < 0:
+                    print(f'WARNING: option value `{paramdict["pct2_cutoff"]}` for pct2_cutoff < 0! Please use a value >= 0. Currently pct2_cutoff is set to be default value `{default_paramdict["pct2_cutoff"]}`!')
+                    paramdict['pct2_cutoff'] = default_paramdict["pct2_cutoff"]
+            except:
+                print(f'WARNING: unrecognized option value `{val}` for pct2_cutoff! Please use numeric value. Currently pct2_cutoff is set to be default value `{default_paramdict["pct2_cutoff"]}`!')
+            continue
+         
+        
+        if opt in ('--sortby_fc'):
+            if val.casefold() == 'true'.casefold():
+                paramdict['sortby_fc'] = True
+            elif val.casefold() == 'false'.casefold():
+                paramdict['sortby_fc'] = False
+            else:
+                print(f'WARNING: unrecognized option value `{val}` for sortby_fc! Please use string of true or false. Currently sortby_fc is set to be default value `{default_paramdict["sortby_fc"]}`!')
+            continue
+        
+        
+        if opt in ('--filter_cell'):
+            if val.casefold() == 'true'.casefold():
+                paramdict['filter_cell'] = True
+            elif val.casefold() == 'false'.casefold():
+                paramdict['filter_cell'] = False
+            else:
+                print(f'WARNING: unrecognized option value `{val}` for filter_cell! Please use string of true or false. Currently filter_cell is set to be default value `{default_paramdict["filter_cell"]}`!')
+            continue
+        
+        
+        if opt in ('--filter_gene'):
+            if val.casefold() == 'true'.casefold():
+                paramdict['filter_gene'] = True
+            elif val.casefold() == 'false'.casefold():
+                paramdict['filter_gene'] = False
+            else:
+                print(f'WARNING: unrecognized option value `{val}` for filter_gene! Please use string of true or false. Currently filter_gene is set to be default value `{default_paramdict["filter_gene"]}`!')
             continue
         
         
@@ -469,7 +626,7 @@ def parseOpt():
             elif val.casefold() == 'false'.casefold():
                 paramdict['use_imputation'] = False
             else:
-                print(f'WARNING: unrecognized option value `{val}` for use_imputation! Please use string of true or false. Currently use_imputation is set to be default value `False`!')
+                print(f'WARNING: unrecognized option value `{val}` for use_imputation! Please use string of true or false. Currently use_imputation is set to be default value `{default_paramdict["use_imputation"]}`!')
             continue
         
         
@@ -478,10 +635,10 @@ def parseOpt():
                 paramdict['diameter'] = int(float(val))
                 
                 if paramdict['diameter'] <= 0:
-                    print(f'WARNING: option value `{paramdict["diameter"]}` for diameter <= 0! Please use integers > 0. Currently diameter is set to be default value `200`!')
-                    paramdict['diameter'] = 200
+                    print(f'WARNING: option value `{paramdict["diameter"]}` for diameter <= 0! Please use integers > 0. Currently diameter is set to be default value `{default_paramdict["diameter"]}`!')
+                    paramdict['diameter'] = default_paramdict["diameter"]
             except:
-                print(f'WARNING: unrecognized option value `{val}` for diameter! Please use numeric value. Currently diameter is set to be default value `200`!')
+                print(f'WARNING: unrecognized option value `{val}` for diameter! Please use numeric value. Currently diameter is set to be default value `{default_paramdict["diameter"]}`!')
             continue
         
         
@@ -502,7 +659,7 @@ def parseOpt():
                     print(f'WARNING: unrecognized option value `{x.strip()}` for imputate_diameter! Please use numeric value. Currently this value will be ignored!')
                     
             if len(tmp_list) == 0:
-                print(f'WARNING: no valid value can be extracted from option value `{val}` for imputate_diameter! Please use one numeric value or an array of numeric values separated by ",". Currently impute_diameter is set to be default value `160,114,80`!')
+                print(f'WARNING: no valid value can be extracted from option value `{val}` for imputate_diameter! Please use one numeric value or an array of numeric values separated by ",". Currently impute_diameter is set to be default value `{",".join([str(x) for x in default_paramdict["impute_diameter"]])}`!')
             else:
                 paramdict['impute_diameter'] = tmp_list
         

@@ -22,6 +22,7 @@ this script stores functions related to pre-processing including:
 
 
 
+import numpy as np
 import pandas as pd
 from cvae import build_CVAE_whole
 from utils import run_DE_only
@@ -29,7 +30,7 @@ from config import print
 
 
 
-def preprocess(spatial_file, ref_file, ref_anno_file, marker_file, A_file, use_cvae, n_hv_gene, n_marker_per_cmp, pseudo_spot_min_cell, pseudo_spot_max_cell, seq_depth_scaler, cvae_input_scaler, cvae_init_lr, redo_de, diagnosis):
+def preprocess(spatial_file, ref_file, ref_anno_file, marker_file, A_file, use_cvae, n_hv_gene, n_marker_per_cmp, pseudo_spot_min_cell, pseudo_spot_max_cell, seq_depth_scaler, cvae_input_scaler, cvae_init_lr, redo_de, use_fdr, p_val_cutoff, fc_cutoff, pct1_cutoff, pct2_cutoff, sortby_fc, filter_cell, filter_gene, diagnosis):
     '''
     preprocess files
 
@@ -63,20 +64,37 @@ def preprocess(spatial_file, ref_file, ref_anno_file, marker_file, A_file, use_c
         initial learning rate for training CVAE
     redo_de : bool
         whether to redo DE after CVAE transformation
+    use_fdr : bool
+        whether to use FDR adjusted p value for filtering and sorting
+    p_val_cutoff : float
+        threshold of p value (or FDR if --use_fdr is true) in marker genes filtering
+    fc_cutoff : float
+        threshold of fold change (without log transform!) in marker genes filtering
+    pct1_cutoff : float
+        threshold of pct.1 in marker genes filtering
+    pct2_cutoff : float
+        threshold of pct.2 in marker genes filtering
+    sortby_fc : bool
+        whether to sort marker genes by fold change
     diagnosis : bool
         if True save more information to files for diagnosis CVAE and hyper-parameter selection
+    filter_cell : bool
+        whether to filter cells before DE
+    filter_gene : bool
+        whether to filter genes before DE
 
     Returns
     -------
     data : Dict
-        X: a 2-D numpy matrix of celltype specific marker gene expression (celltypes * genes).
-        Y: a 2-D numpy matrix of spatial gene expression (spots * genes).
-        A: a 2-D numpy matrix of Adjacency matrix (spots * spots), or is None. Adjacency matrix of spatial sptots (1: connected / 0: disconnected). All 0 in diagonal.
-        N: a 1-D numpy array of sequencing depth of all spots (length #spots). If it's None, use sum of observed marker gene expressions as sequencing depth.
-        non_zero_mtx: If it's None, then do not filter zeros during regression. If it's a bool 2-D numpy matrix (spots * genes) as False means genes whose nUMI=0 while True means genes whose nUMI>0 in corresponding spots. The bool indicators can be calculated based on either observerd raw nUMI counts in spatial data, or CVAE transformed nUMI counts.
-        spot_names: a list of string of spot barcodes. Only keep spots passed filtering.
-        gene_names: a list of string of gene symbols. Only keep actually used marker gene symbols.
-        celltype_names: a list of string of celltype names.
+        a Dict contains all info need for modeling:
+            X: a 2-D numpy matrix of celltype specific marker gene expression (celltypes * genes).\n
+            Y: a 2-D numpy matrix of spatial gene expression (spots * genes).\n
+            A: a 2-D numpy matrix of Adjacency matrix (spots * spots), or is None. Adjacency matrix of spatial sptots (1: connected / 0: disconnected). All 0 in diagonal.\n
+            N: a 1-D numpy array of sequencing depth of all spots (length #spots). If it's None, use sum of observed marker gene expressions as sequencing depth.\n
+            non_zero_mtx: If it's None, then do not filter zeros during regression. If it's a bool 2-D numpy matrix (spots * genes) as False means genes whose nUMI=0 while True means genes whose nUMI>0 in corresponding spots. The bool indicators can be calculated based on either observerd raw nUMI counts in spatial data, or CVAE transformed nUMI counts.\n
+            spot_names: a list of string of spot barcodes. Only keep spots passed filtering.\n
+            gene_names: a list of string of gene symbols. Only keep actually used marker gene symbols.\n
+            celltype_names: a list of string of celltype names.
     '''
     
     # first determine whether to build CVAE
@@ -84,16 +102,16 @@ def preprocess(spatial_file, ref_file, ref_anno_file, marker_file, A_file, use_c
         if ref_file is None or ref_anno_file is None:
             raise Exception('ERROR: building CVAE requires both reference scRNA-seq data and corresponding cell-type annotation specified! But at least one of them is not specified!')
             
-        print('######### First build CVAE... #########\n')
+        print('first build CVAE...\n')
         # build CVAE, and return the data dict including transformed spatial data and reference gene expression
-        spatial_df, cvae_marker_df, new_markers = build_CVAE_whole(spatial_file, ref_file, ref_anno_file, marker_file, n_hv_gene, n_marker_per_cmp, pseudo_spot_min_cell, pseudo_spot_max_cell, seq_depth_scaler, cvae_input_scaler, cvae_init_lr, redo_de, diagnosis)
+        spatial_df, cvae_marker_df, new_markers = build_CVAE_whole(spatial_file, ref_file, ref_anno_file, marker_file, n_hv_gene, n_marker_per_cmp, pseudo_spot_min_cell, pseudo_spot_max_cell, seq_depth_scaler, cvae_input_scaler, cvae_init_lr, redo_de, use_fdr, p_val_cutoff, fc_cutoff, pct1_cutoff, pct2_cutoff, sortby_fc, diagnosis, filter_cell, filter_gene)
         
         # calculate squencing depth, sum also works on sparse dataframe
         N = spatial_df.sum(axis=1)
     
     else:
         
-        print('######### Building CVAE skipped... #########\n')
+        print('building CVAE skipped...\n')
         
         # to_dense has been depreated
         # read spatial dataframe into a sparse dataframe
@@ -105,6 +123,16 @@ def preprocess(spatial_file, ref_file, ref_anno_file, marker_file, A_file, use_c
         # check whether cell name are unique
         if len(set(spatial_df.index.to_list())) < spatial_df.shape[0]:
             raise Exception('spot barcodes in spatial data are not unique!')
+            
+        # filtering genes
+        if filter_gene:
+            # Remove genes present in <3 cells
+            pre_n_gene = spatial_df.shape[1]
+            spatial_df = spatial_df.loc[:, spatial_df.apply(lambda x: np.count_nonzero(x), axis=0) >= 3].copy()
+            if pre_n_gene > spatial_df.shape[1]:
+                print(f'filtering genes present in <3 spots: {pre_n_gene-spatial_df.shape[1]} genes removed\n')
+            else:
+                print('filtering genes present in <3 spots: No genes removed\n')
     
         # calculate squencing depth, sum also works on sparse dataframe
         N = spatial_df.sum(axis=1)
@@ -136,7 +164,7 @@ def preprocess(spatial_file, ref_file, ref_anno_file, marker_file, A_file, use_c
         else:
             # perform DE, return the marker gene expression. The identified markers but not in spatial data has already been removed
             print('no marker gene profile provided. Perform DE to get cell-type marker genes on scRNA-seq data...\n')
-            marker_df = run_DE_only(ref_file, ref_anno_file, spatial_df.columns.tolist(), n_marker_per_cmp, diagnosis)
+            marker_df = run_DE_only(ref_file, ref_anno_file, spatial_df.columns.tolist(), n_marker_per_cmp, use_fdr, p_val_cutoff, fc_cutoff, pct1_cutoff, pct2_cutoff, sortby_fc, diagnosis, filter_cell, filter_gene)
             marker_genes = marker_df.columns
     
     else:

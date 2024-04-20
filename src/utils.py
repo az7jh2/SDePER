@@ -13,7 +13,7 @@ this script stores utils functions
 import os
 import numpy as np
 import pandas as pd
-from config import print, min_val, output_path
+from config import print, output_path
 import scanpy as sc
 sc.settings.verbosity = 0  # verbosity: errors (0), warnings (1), info (2), hints (3)
 
@@ -78,14 +78,13 @@ def reparameterTheta(theta, e_alpha):
     -------
     w : 3-D numpy array (#spot * #celltype * 1)
         re-parametrization w = e^alpha * theta.
-
     '''
     
     return e_alpha[:, None, None] * theta
 
 
 
-def read_spatial_data(spatial_file):
+def read_spatial_data(spatial_file, filter_gene):
     '''
     read spatial data saved as a CSV file by Scanpy
 
@@ -93,6 +92,8 @@ def read_spatial_data(spatial_file):
     ----------
     spatial_file : string
         full path of input csv file of raw nUMI counts in spatial transcriptomic data (spots * genes).
+    filter_gene : bool
+        whether to filter genes before DE.
         
     Returns
     -------
@@ -101,7 +102,6 @@ def read_spatial_data(spatial_file):
     
     # Read spatial spot-level data
     spatial_spot_obj = sc.read_csv(spatial_file)
-    spatial_spot_obj.layers['raw_nUMI'] = spatial_spot_obj.X.copy()
     print(f'read spatial data from file {spatial_file}')
     print(f'total {spatial_spot_obj.n_obs} spots; {spatial_spot_obj.n_vars} genes\n')
     
@@ -112,6 +112,18 @@ def read_spatial_data(spatial_file):
     if len(set(spatial_spot_obj.var_names.tolist())) < spatial_spot_obj.n_vars:
         raise Exception('gene names in spatial data are not unique!')
     
+    # note for spatial data, we do not filter out spots
+    if filter_gene:
+        # Remove genes present in <3 cells
+        pre_n_gene = spatial_spot_obj.n_vars
+        sc.pp.filter_genes(spatial_spot_obj, min_cells=3)
+        if pre_n_gene > spatial_spot_obj.n_vars:
+            print(f'filtering genes present in <3 spots: {pre_n_gene-spatial_spot_obj.n_vars} genes removed\n')
+        else:
+            print('filtering genes present in <3 spots: No genes removed\n')
+            
+    # make a DEEP COPY of raw nUMI count
+    spatial_spot_obj.layers['raw_nUMI'] = spatial_spot_obj.X.copy()
     # Normalize each cell by total counts over ALL genes
     sc.pp.normalize_total(spatial_spot_obj, target_sum=1, inplace=True)
     
@@ -119,7 +131,7 @@ def read_spatial_data(spatial_file):
 
 
 
-def read_scRNA_data(ref_file, ref_anno_file):
+def read_scRNA_data(ref_file, ref_anno_file, filter_cell, filter_gene):
     '''
     read scRNA-seq data saved as a CSV file by Scanpy, also read cell-type annotation, then subset cells with cell-type annotation
 
@@ -129,6 +141,10 @@ def read_scRNA_data(ref_file, ref_anno_file):
         full path of input csv file of raw nUMI counts in scRNA-seq data (cells * genes).
     ref_anno_file : string
         full path of input csv file of cell-type annotations for all cells in scRNA-seq data.
+    filter_cell : bool
+        whether to filter cells before DE.
+    filter_gene : bool
+        whether to filter genes before DE.
         
     Returns
     -------
@@ -169,6 +185,25 @@ def read_scRNA_data(ref_file, ref_anno_file):
     scrna_celltype = scrna_celltype.loc[overlap_cells, :]
     assert((scrna_obj.obs_names == scrna_celltype.index).all())
     scrna_obj.obs['celltype'] = pd.Categorical(scrna_celltype.iloc[:,0])  # Categoricals are preferred for efficiency
+    
+    if filter_cell:
+        # Remove cells with <200 genes
+        pre_n_cell = scrna_obj.n_obs
+        sc.pp.filter_cells(scrna_obj, min_genes=200)
+        if pre_n_cell > scrna_obj.n_obs:
+            print(f'filtering cells with <200 genes: {pre_n_cell-scrna_obj.n_obs} cells removed\n')
+        else:
+            print('filtering cells with <200 genes: No cells removed\n')
+    
+    if filter_gene:
+        # Remove genes present in <10 cells
+        pre_n_gene = scrna_obj.n_vars
+        sc.pp.filter_genes(scrna_obj, min_cells=10)
+        if pre_n_gene > scrna_obj.n_vars:
+            print(f'filtering genes present in <10 cells: {pre_n_gene-scrna_obj.n_vars} genes removed\n')
+        else:
+            print('filtering genes present in <10 cells: No genes removed\n')
+    
     # make a DEEP COPY of raw nUMI count
     scrna_obj.layers['raw_nUMI'] = scrna_obj.X.copy()
     # Normalize each cell by total counts over ALL genes
@@ -178,13 +213,13 @@ def read_scRNA_data(ref_file, ref_anno_file):
 
 
 
-def run_DE(sc_obj, n_marker_per_cmp, save_result=False, save_file_name=None):
+def run_DE(sc_obj, n_marker_per_cmp, use_fdr, p_val_cutoff, fc_cutoff, pct1_cutoff, pct2_cutoff, sortby_fc, save_result=False, save_file_name=None):
     '''
     differential on cell-types in scRNA-seq data.
     
-    we compare each cell-type with anotherr one cell-type at a time.
+    we compare each cell-type with another one cell-type at a time.
     
-    only choose TOP X marker genes for one comparison with one cell-type vs another one cell-type, with the FDR adjusted p value < 0.05 + fold change > 1.2, and a combined rank of log fold change and pct.1/pct.2. Then combine all marker genes from all comparisons.
+    only choose TOP X marker genes for one comparison with one cell-type vs another one cell-type, with filtering (the FDR adjusted p value <= 0.05 + fold change >= 1.2 + pct.1 >= 0.3 + pct.2 <= 0.1, and sorting by fold change (by default). Then combine all marker genes from all comparisons.
     
     Note: the genes in object are overlapped genes with spatial data only.
     
@@ -198,6 +233,18 @@ def run_DE(sc_obj, n_marker_per_cmp, save_result=False, save_file_name=None):
         scRNA-seq data object.
     n_marker_per_cmp : int
         number of TOP marker genes for each comparison in DE
+    use_fdr : bool
+        whether to use FDR adjusted p value for filtering and sorting
+    p_val_cutoff : float
+        threshold of p value (or FDR if --use_fdr is true) in marker genes filtering
+    fc_cutoff : float
+        threshold of fold change (without log transform!) in marker genes filtering
+    pct1_cutoff : float
+        threshold of pct.1 in marker genes filtering
+    pct2_cutoff : float
+        threshold of pct.2 in marker genes filtering
+    sortby_fc : bool
+        whether to sort marker genes by fold change
     save_result : bool
         if true, save dataframe of DE result to csv file
     save_file_name : string
@@ -231,8 +278,9 @@ def run_DE(sc_obj, n_marker_per_cmp, save_result=False, save_file_name=None):
         sub_obj = sc_obj[sc_obj.obs['celltype'] == celltype]
         # get raw nUMI count (cells * genes)
         sub_df = sc.get.obs_df(sub_obj, layer='raw_nUMI', keys=sub_obj.var_names.to_list())
+        assert sub_df.shape[0] > 0, f'Error! there is no cell for cell-type `{celltype}`'
         # column sum divided by number of rows
-        return ((sub_df>0).sum(axis=0) + min_val) / (sub_df.shape[0] + 1e-6)
+        return ((sub_df>0).sum(axis=0)) / (sub_df.shape[0])
         
         
     
@@ -241,6 +289,11 @@ def run_DE(sc_obj, n_marker_per_cmp, save_result=False, save_file_name=None):
     
     scrna_marker_genes = list()
     de_result_list = []
+    
+    if use_fdr:
+        pval_col = 'pvals_adj'
+    else:
+        pval_col = 'pvals'
     
     # first calculate pct for each cell-type
     pct_dict = {}
@@ -263,14 +316,17 @@ def run_DE(sc_obj, n_marker_per_cmp, save_result=False, save_file_name=None):
             tmp_df = tmp_df.merge(pct_dict[this_celltype].rename('pct1'), left_on='names', right_index=True, validate='one_to_one')
             tmp_df = tmp_df.merge(pct_dict[other_celltype].rename('pct2'), left_on='names', right_index=True, validate='one_to_one')
             
-            # get genes with pvals_adj < 0.05 and log fold change > 1.2
-            tmp_df = tmp_df.loc[(tmp_df['pvals_adj']<0.05) & (tmp_df['logfoldchanges']>np.log2(1.2))]
+            # filter genes
+            tmp_df = tmp_df.loc[(tmp_df[pval_col]<=p_val_cutoff) & (tmp_df['logfoldchanges']>=np.log2(fc_cutoff)) & (tmp_df['pct1']>=pct1_cutoff) & (tmp_df['pct2']<=pct2_cutoff)]
             
             # add cell-types
             tmp_df['celltype1'] = this_celltype
             tmp_df['celltype2'] = other_celltype
             
             if tmp_df.shape[0] <= n_marker_per_cmp:
+                
+                if tmp_df.shape[0] < n_marker_per_cmp:
+                    print(f'WARNING: only {tmp_df.shape[0]} genes passing filtering (<{n_marker_per_cmp}) for {this_celltype} vs {other_celltype}')
                 
                 # no need to further rank, directly select all available genes
                 scrna_marker_genes += tmp_df['names'].to_list()
@@ -279,7 +335,7 @@ def run_DE(sc_obj, n_marker_per_cmp, save_result=False, save_file_name=None):
                 tmp_df['selected'] = 1
             
             else:
-            
+                '''
                 # rank of pct.1/pct.2
                 tmp_df['pct_divide'] = tmp_df['pct1'] / tmp_df['pct2']
                 tmp_df.sort_values(by='pct_divide', ascending=False, inplace=True)
@@ -291,6 +347,13 @@ def run_DE(sc_obj, n_marker_per_cmp, save_result=False, save_file_name=None):
                 
                 tmp_df['comb_rank'] = tmp_df['pct_rank'] + tmp_df['logfc_rank']
                 tmp_df.sort_values(by=['comb_rank', 'logfoldchanges'], ascending=[True, False], inplace=True)
+                '''
+                
+                # sort by fold change or p value
+                if sortby_fc:
+                    tmp_df.sort_values(by=[pval_col, 'logfoldchanges'], ascending=[True, False], inplace=True)
+                else:
+                    tmp_df.sort_values(by=['logfoldchanges', pval_col], ascending=[False, True], inplace=True)
                 
                 # select top X marker genes
                 scrna_marker_genes += tmp_df['names'].to_list()[:n_marker_per_cmp]
@@ -311,7 +374,7 @@ def run_DE(sc_obj, n_marker_per_cmp, save_result=False, save_file_name=None):
 
 
 
-def run_DE_only(ref_file, ref_anno_file, spatial_genes, n_marker_per_cmp, save_result=False):
+def run_DE_only(ref_file, ref_anno_file, spatial_genes, n_marker_per_cmp, use_fdr, p_val_cutoff, fc_cutoff, pct1_cutoff, pct2_cutoff, sortby_fc, save_result=False, filter_cell=True, filter_gene=True):
     '''
     read scRNA-seq raw nUMI and cell-type annotation, then perform DE analysis.
     
@@ -327,8 +390,24 @@ def run_DE_only(ref_file, ref_anno_file, spatial_genes, n_marker_per_cmp, save_r
         genes included in spatial dataset.
     n_marker_per_cmp : int
         number of TOP marker genes for each comparison in DE
+    use_fdr : bool
+        whether to use FDR adjusted p value for filtering and sorting
+    p_val_cutoff : float
+        threshold of p value (or FDR if --use_fdr is true) in marker genes filtering
+    fc_cutoff : float
+        threshold of fold change (without log transform!) in marker genes filtering
+    pct1_cutoff : float
+        threshold of pct.1 in marker genes filtering
+    pct2_cutoff : float
+        threshold of pct.2 in marker genes filtering
+    sortby_fc : bool
+        whether to sort marker genes by fold change
     save_result : bool
         if true, save dataframe of DE result to csv file
+    filter_cell : bool
+        whether to filter cells before DE
+    filter_gene : bool
+        whether to filter genes before DE
         
     Returns
     -------
@@ -336,7 +415,7 @@ def run_DE_only(ref_file, ref_anno_file, spatial_genes, n_marker_per_cmp, save_r
         average gene expressions of identified cell-type specific marker genes from refer scRNA-seq data
     '''
     
-    scrna_obj = read_scRNA_data(ref_file, ref_anno_file)
+    scrna_obj = read_scRNA_data(ref_file, ref_anno_file, filter_cell, filter_gene)
     
     # subset genes
     overlap_genes = list(set(spatial_genes).intersection(set(scrna_obj.var_names)))
@@ -346,7 +425,7 @@ def run_DE_only(ref_file, ref_anno_file, spatial_genes, n_marker_per_cmp, save_r
     scrna_obj = scrna_obj[:, overlap_genes].copy()
     
     # DE
-    marker_genes = run_DE(scrna_obj, n_marker_per_cmp, save_result, 'DE celltype markers.csv')
+    marker_genes = run_DE(scrna_obj, n_marker_per_cmp, use_fdr, p_val_cutoff, fc_cutoff, pct1_cutoff, pct2_cutoff, sortby_fc, save_result, 'DE celltype markers.csv')
     
     # generate average gene expressions (gene signature) for cell-types based on normalized values
     tmp_df = sc.get.obs_df(scrna_obj, keys=marker_genes)
@@ -359,7 +438,7 @@ def run_DE_only(ref_file, ref_anno_file, spatial_genes, n_marker_per_cmp, save_r
 
 
 
-def rerun_DE(scRNA_df, scRNA_celltype, n_marker_per_cmp, save_result=False):
+def rerun_DE(scRNA_df, scRNA_celltype, n_marker_per_cmp, use_fdr, p_val_cutoff, fc_cutoff, pct1_cutoff, pct2_cutoff, sortby_fc, save_result=False, filter_gene=True):
     '''
     rerun DE on CVAE transformed scRNA-seq data
     
@@ -375,8 +454,22 @@ def rerun_DE(scRNA_df, scRNA_celltype, n_marker_per_cmp, save_result=False):
         cell-type annotations for cells in scRNA-seq data. Only 1 column named <celltype>
     n_marker_per_cmp : int
         number of TOP marker genes for each comparison in DE
+    use_fdr : bool
+        whether to use FDR adjusted p value for filtering and sorting
+    p_val_cutoff : float
+        threshold of p value (or FDR if --use_fdr is true) in marker genes filtering
+    fc_cutoff : float
+        threshold of fold change (without log transform!) in marker genes filtering
+    pct1_cutoff : float
+        threshold of pct.1 in marker genes filtering
+    pct2_cutoff : float
+        threshold of pct.2 in marker genes filtering
+    sortby_fc : bool
+        whether to sort marker genes by fold change
     save_result : bool
         if true, save dataframe of DE result to csv file
+    filter_gene : bool
+        whether to filter genes before DE.
         
     Returns
     -------
@@ -393,24 +486,44 @@ def rerun_DE(scRNA_df, scRNA_celltype, n_marker_per_cmp, save_result=False):
     # add cell-type annotation to metadata
     scrna_obj.obs['celltype'] = pd.Categorical(scRNA_celltype.iloc[:,0])  # Categoricals are preferred for efficiency
     
+    if filter_gene:
+        # Remove genes present in <10 cells
+        pre_n_gene = scrna_obj.n_vars
+        sc.pp.filter_genes(scrna_obj, min_cells=10)
+        if pre_n_gene > scrna_obj.n_vars:
+            print(f'filtering genes present in <10 cells: {pre_n_gene-scrna_obj.n_vars} genes removed\n')
+        else:
+            print('filtering genes present in <10 cells: No genes removed\n')
+    
     # do not normalize by sequencing depth as it's already normalized
     # so directly run DE on values in AnnData.X
-    return run_DE(scrna_obj, n_marker_per_cmp, save_result, 'redo DE celltype markers.csv')
+    return run_DE(scrna_obj, n_marker_per_cmp, use_fdr, p_val_cutoff, fc_cutoff, pct1_cutoff, pct2_cutoff, sortby_fc, save_result, 'redo DE celltype markers.csv')
 
 
 
 # check total size of a Python object such as a Dictionary
 # ref https://code.activestate.com/recipes/577504/
 def total_size(o, handlers={}, verbose=False):
-    """ Returns the approximate memory footprint an object and all of its contents.
-
-    Automatically finds the contents of the following builtin containers and
-    their subclasses:  tuple, list, deque, dict, set and frozenset.
-    To search other containers, add handlers to iterate over their contents:
-
-        handlers = {SomeContainerClass: iter,
-                    OtherContainerClass: OtherContainerClass.get_elements}
-
+    """
+    Returns the approximate memory footprint of an object and all of its contents.
+    
+    Automatically finds the contents of several built-in containers and their subclasses,
+    including tuple, list, deque, dict, set, and frozenset. To search other containers, 
+    add handlers that iterate over their contents.
+    
+    Parameters
+    ----------
+    o : object
+        The object whose memory footprint is to be calculated.
+    handlers : dict, optional
+        A dictionary of handler functions keyed by container types. These handlers are used to iterate over container contents. Defaults to an empty dictionary.
+    verbose : bool, optional
+        If True, the function prints more information about what it's doing. Defaults to False.
+    
+    Returns
+    -------
+    obj_size : int
+        An approximation of the total memory footprint of the object in bytes.
     """
     
     from sys import getsizeof, stderr
@@ -449,3 +562,39 @@ def total_size(o, handlers={}, verbose=False):
         return s
 
     return sizeof(o)
+
+
+
+def check_decoder(cvae, decoder, data, labels):
+    '''
+    since we first create a decoder then update its weights based on the corresponding weights in CVAE, we need to double check the weights are updated correctly, and the decoded output matchs the CVAE output
+
+    Parameters
+    ----------
+    cvae : Keras model
+        already trained CVAE model
+    decoder : Keras model
+        a separated decoder whose weights are already updated, i.e. it should give the same decoded output with CVAE
+    data : 2-D numpy array
+        data used for checking decoder (columns are genes, rows are cells, spatial spots or pseudo-spots)
+    labels : 1-D numpy array
+        corresponding conditional variables for each row in data
+
+    Returns
+    -------
+    None.
+    '''
+    
+    from tensorflow.keras.models import Model
+    
+    # a tmp model to get the embedding after sampling and decoder output at the same time
+    tmp_model = Model([cvae.get_layer('encoder_input').input, cvae.get_layer('cond_input').input],
+                      [cvae.get_layer('z').output, cvae.get_layer('decoder_output_act').output],
+                      name='tmp_model')
+    # the preditions of embedding and decoder output
+    [tmp_embedding, tmp_output] = tmp_model.predict([data, labels])
+    # feed the embedding to the new decoder
+    tmp_output2 = decoder.predict([tmp_embedding, labels])
+    # are them the same?
+    tmp = np.all((tmp_output-tmp_output2)<1e-12)
+    assert(tmp==True)

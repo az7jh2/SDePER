@@ -5,19 +5,32 @@ Created on Tue May 10 03:15:36 2022
 
 @author: hill103
 
-this script is the main function of the whole GLRM pipeline
+this script is the main function of the whole CVAE-GLRM pipeline
 
 pipeline steps:
     
-    1. receive and parse the command line parameters and then pass the parameters to GLRM model
-    2. pre-process (include building CVAE)
-    3. model fitting
-    4. post-process and save the results
+    1. receive and parse the command line parameters and then pass the parameters to CVAE-GLRM model
+    2. pre-process
+    3. building CVAE (if available)
+    4. GLRM model fitting
+    5. post-process and save the results
 """
 
 
 
 def main():
+    '''
+    main function
+    
+    Parameters
+    ----------
+    None.
+
+    Returns
+    -------
+    None.
+
+    '''
 
     from config import print, cur_version, output_path
     import os
@@ -52,7 +65,7 @@ def main():
     
     
     print('\n\n######### Preprocessing... #########\n')
-    data = preprocess(paramdict['spatial_file'], paramdict['ref_file'], paramdict['ref_celltype_file'], paramdict['marker_file'], paramdict['A_file'], paramdict['use_cvae'], paramdict['n_hv_gene'], paramdict['n_marker_per_cmp'], paramdict['pseudo_spot_min_cell'], paramdict['pseudo_spot_max_cell'], paramdict['seq_depth_scaler'], paramdict['cvae_input_scaler'], paramdict['cvae_init_lr'], paramdict['redo_de'], paramdict['diagnosis'])
+    data = preprocess(paramdict['spatial_file'], paramdict['ref_file'], paramdict['ref_celltype_file'], paramdict['marker_file'], paramdict['A_file'], paramdict['use_cvae'], paramdict['n_hv_gene'], paramdict['n_marker_per_cmp'], paramdict['pseudo_spot_min_cell'], paramdict['pseudo_spot_max_cell'], paramdict['seq_depth_scaler'], paramdict['cvae_input_scaler'], paramdict['cvae_init_lr'], paramdict['redo_de'], paramdict['use_fdr'], paramdict['p_val_cutoff'], paramdict['fc_cutoff'], paramdict['pct1_cutoff'], paramdict['pct2_cutoff'], paramdict['sortby_fc'], paramdict['filter_cell'], paramdict['filter_gene'], paramdict['diagnosis'])
     
     
     # whether to estimate gamma_g, if CVAE is used then disable gamma_g estimation

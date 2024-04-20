@@ -23,7 +23,7 @@ Welcome to SDePER's documentation!
    :alt: Read the Docs (version)
 
 
-SDePER (\ **S**\ patial **De**\ convolution method with **P**\ latform **E**\ ffect **R**\ emoval) is a two-step **hybrid** machine learning and regression method considering platform effect, spatial information and sparsity in **deconvolution** of spatial transcriptomics data using reference single-cell RNA sequencing data from same tissue type. It's also able to **impute** cell type compositions and gene expression at **enhanced resolution**.
+SDePER (\ **S**\ patial **De**\ convolution method with **P**\ latform **E**\ ffect **R**\ emoval) is a **hybrid** machine learning and regression method to deconvolve Spatial barcoding-based transcriptomic data using reference single-cell RNA sequencing data, considering **platform effects removal**, **sparsity** of cell types per capture spot and across-spots **spatial correlation** in cell type compositions. SDePER is also able to **impute** cell type compositions and gene expression at unmeasured locations in a tissue map with **enhanced resolution**..
 
 
 Quick Start
@@ -64,3 +64,11 @@ Check out :doc:`installation` page for detailed installation instructions, and :
    cli_options
    best_practice
    changelog
+
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Python API
+   :hidden:
+
+   modules

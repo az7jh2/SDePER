@@ -32,9 +32,15 @@ release = cur_version
 # Add any Sphinx extension module names here, as strings. They can be
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
-# Sphinx Substitution Extensions (https://github.com/adamtheturtle/sphinx-substitution-extensions) allow substitutions within code blocks
-# sphinx-tabs (https://github.com/executablebooks/sphinx-tabs) create tabbed content
-extensions = ['sphinx_substitution_extensions', 'sphinx_tabs.tabs', 'sphinx.ext.autodoc', 'sphinx.ext.napoleon', 'sphinx.ext.viewcode'
+# sphinx-prompt (https://pypi.org/project/sphinx-prompt/): useful to show commands outputs, Python REPL scripts and more
+# Sphinx Substitution Extensions (https://github.com/adamtheturtle/sphinx-substitution-extensions): allow substitutions within code blocks
+# sphinx-tabs (https://github.com/executablebooks/sphinx-tabs): create tabbed content
+# sphinx-toolbox changeset (https://sphinx-toolbox.readthedocs.io/en/stable/extensions/changeset.html): customised version directives
+# sphinxcontrib.jquery (https://pypi.org/project/sphinxcontrib-jquery/): ensures that jQuery is always installed for use in Sphinx themes or extensions
+# sphinx.ext.autodoc (https://www.sphinx-doc.org/en/master/usage/extensions/autodoc.html): include documentation from docstrings
+# sphinx.ext.viewcode (https://www.sphinx-doc.org/en/master/usage/extensions/viewcode.html): add links to highlighted source code
+# sphinx.ext.napoleon (https://sphinxcontrib-napoleon.readthedocs.io/en/latest/): a pre-processor that parses NumPy and Google style docstrings and converts them to reStructuredText before Sphinx attempts to parse them
+extensions = ['sphinx-prompt', 'sphinx_substitution_extensions', 'sphinx_tabs.tabs', 'sphinx.ext.autodoc', 'sphinx.ext.napoleon', 'sphinx.ext.viewcode', 'sphinx_toolbox.changeset', 'sphinxcontrib.jquery'
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -52,7 +58,7 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 # a list of builtin themes.
 #
 # By default, Read the Docs uses the sphinx_rtd_theme; alabaster is the default theme of Sphinx
-# html_theme = 'sphinx_rtd_theme'
+html_theme = 'sphinx_rtd_theme'
 
 
 # Add any paths that contain custom static files (such as style sheets) here,

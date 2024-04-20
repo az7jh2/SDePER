@@ -104,7 +104,7 @@ sigma2_eps = 1e-8
 
 """
 configuration for reproducible results in keras + TensorFlow
-skipped here, we configure the environment later
+skipped here, we configure the environment in main function
 """
 # Seed value
 #seed_value = 1154

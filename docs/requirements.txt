@@ -1,2 +1,5 @@
 sphinx-substitution-extensions
 sphinx-tabs
+sphinx-toolbox
+sphinxcontrib-jquery
+sdeper
