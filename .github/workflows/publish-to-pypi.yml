@@ -18,7 +18,10 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment: release # specify the environment
+    environment: release  # specify the environment
+    permissions:  # permission needed for trusted publishing
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python

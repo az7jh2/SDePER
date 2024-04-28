@@ -11,9 +11,9 @@ Version 1.2.0 (2024-04-28)
    * Integration of Batch Normalization into the CVAE training process.
    * Inclusion of a logarithmic transformation in the preprocessing of gene expression data for CVAE input.
    * Generation of "pseudo-spots" under spatial conditions through the random combination of spatial spots.
-   * Addition of two command-line options: :option:`--n_pseudo_spot` and :option:`--num_hidden_layer`. We have also adjusted the default value of :option:`--cvae_init_lr`.
+   * Addition of two command-line options: :option:`--n_pseudo_spot` and :option:`--num_hidden_layer`. Also adjusted the default value of :option:`--cvae_init_lr`.
 
-* Relocated all code related to generating diagnostic figures to a new module, :mod:`diagnosis_plots`. Additionally, we have organized the output figures into a folder named `diagnosis` within the output path (`#6 <https://github.com/az7jh2/SDePER/issues/6>`_).
+* Relocated all code related to generating diagnostic figures to a new module, :mod:`diagnosis_plots`. Additionally organized the output figures into a folder named `diagnosis` within the output path (`#6 <https://github.com/az7jh2/SDePER/issues/6>`_).
 
 
 Version 1.1.0 (2024-04-20)
