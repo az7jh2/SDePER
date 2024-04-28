@@ -30,7 +30,7 @@ from config import print
 
 
 
-def preprocess(spatial_file, ref_file, ref_anno_file, marker_file, A_file, use_cvae, n_hv_gene, n_marker_per_cmp, pseudo_spot_min_cell, pseudo_spot_max_cell, seq_depth_scaler, cvae_input_scaler, cvae_init_lr, redo_de, use_fdr, p_val_cutoff, fc_cutoff, pct1_cutoff, pct2_cutoff, sortby_fc, filter_cell, filter_gene, diagnosis):
+def preprocess(spatial_file, ref_file, ref_anno_file, marker_file, A_file, use_cvae, n_hv_gene, n_marker_per_cmp, n_pseudo_spot, pseudo_spot_min_cell, pseudo_spot_max_cell, seq_depth_scaler, cvae_input_scaler, cvae_init_lr, num_hidden_layer, redo_de, use_fdr, p_val_cutoff, fc_cutoff, pct1_cutoff, pct2_cutoff, sortby_fc, filter_cell, filter_gene, diagnosis):
     '''
     preprocess files
 
@@ -51,37 +51,41 @@ def preprocess(spatial_file, ref_file, ref_anno_file, marker_file, A_file, use_c
     n_hv_gene : int
         number of highly variable genes for CVAE.
     n_marker_per_cmp : int
-        number of TOP marker genes for each comparison in DE
+        number of TOP marker genes for each comparison in DE.
+    n_pseudo_spot : int
+        number of pseudo-spots.
     pseudo_spot_min_cell : int
-        minimum value of cells in pseudo-spot
+        minimum value of cells in pseudo-spot.
     pseudo_spot_max_cell : int
-        maximum value of cells in pseudo-spot
+        maximum value of cells in pseudo-spot.
     seq_depth_scaler : int
-        a scaler of scRNA-seq sequencing depth
+        a scaler of scRNA-seq sequencing depth.
     cvae_input_scaler : int
-        maximum value of the scaled input for CVAE
+        maximum value of the scaled input for CVAE.
     cvae_init_lr : float
-        initial learning rate for training CVAE
+        initial learning rate for training CVAE.
+    num_hidden_layer : int
+        number of hidden layers in encoder and decoder.
     redo_de : bool
-        whether to redo DE after CVAE transformation
+        whether to redo DE after CVAE transformation.
     use_fdr : bool
-        whether to use FDR adjusted p value for filtering and sorting
+        whether to use FDR adjusted p value for filtering and sorting.
     p_val_cutoff : float
-        threshold of p value (or FDR if --use_fdr is true) in marker genes filtering
+        threshold of p value (or FDR if --use_fdr is true) in marker genes filtering.
     fc_cutoff : float
-        threshold of fold change (without log transform!) in marker genes filtering
+        threshold of fold change (without log transform!) in marker genes filtering.
     pct1_cutoff : float
-        threshold of pct.1 in marker genes filtering
+        threshold of pct.1 in marker genes filtering.
     pct2_cutoff : float
-        threshold of pct.2 in marker genes filtering
+        threshold of pct.2 in marker genes filtering.
     sortby_fc : bool
-        whether to sort marker genes by fold change
+        whether to sort marker genes by fold change.
     diagnosis : bool
-        if True save more information to files for diagnosis CVAE and hyper-parameter selection
+        if True save more information to files for diagnosis CVAE and hyper-parameter selection.
     filter_cell : bool
-        whether to filter cells before DE
+        whether to filter cells before DE.
     filter_gene : bool
-        whether to filter genes before DE
+        whether to filter genes before DE.
 
     Returns
     -------
@@ -104,7 +108,7 @@ def preprocess(spatial_file, ref_file, ref_anno_file, marker_file, A_file, use_c
             
         print('first build CVAE...\n')
         # build CVAE, and return the data dict including transformed spatial data and reference gene expression
-        spatial_df, cvae_marker_df, new_markers = build_CVAE_whole(spatial_file, ref_file, ref_anno_file, marker_file, n_hv_gene, n_marker_per_cmp, pseudo_spot_min_cell, pseudo_spot_max_cell, seq_depth_scaler, cvae_input_scaler, cvae_init_lr, redo_de, use_fdr, p_val_cutoff, fc_cutoff, pct1_cutoff, pct2_cutoff, sortby_fc, diagnosis, filter_cell, filter_gene)
+        spatial_df, cvae_marker_df, new_markers = build_CVAE_whole(spatial_file, ref_file, ref_anno_file, marker_file, n_hv_gene, n_marker_per_cmp, n_pseudo_spot, pseudo_spot_min_cell, pseudo_spot_max_cell, seq_depth_scaler, cvae_input_scaler, cvae_init_lr, num_hidden_layer, redo_de, use_fdr, p_val_cutoff, fc_cutoff, pct1_cutoff, pct2_cutoff, sortby_fc, diagnosis, filter_cell, filter_gene)
         
         # calculate squencing depth, sum also works on sparse dataframe
         N = spatial_df.sum(axis=1)

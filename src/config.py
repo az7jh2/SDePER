@@ -55,6 +55,8 @@ else:
     input_path = ''
     output_path = os.getcwd()
 
+# diagnosis plots folder
+diagnosis_path = os.path.join(output_path, 'diagnosis')
 
 
 """

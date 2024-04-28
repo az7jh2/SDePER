@@ -15,7 +15,6 @@ the performance metric is RMSE of predicted gene expressions in validation fold
 
 
 
-import os
 import networkx as nx
 import numpy as np
 from scipy import sparse
@@ -24,7 +23,7 @@ from time import time
 from admm_fit import one_admm_fit
 from local_fit_numba import update_theta, hv_wrapper
 from utils import reportRMSE, calcRMSE
-from config import print, output_path
+from config import print
 
 
 
@@ -309,27 +308,15 @@ def cv_find_lambda_r(data, mle_theta, mle_e_alpha, gamma_g, sigma2, lasso_weight
         
     # draw plot
     if diagnosis:
-        import matplotlib.pyplot as plt
-        import seaborn as sns
-        sns.set()
         
-        fig, ax = plt.subplots()
-        ax.plot(candidate_list[:len(avg_rmse_list)], avg_rmse_list, marker='o')
-        # log scale do not support 0, so use symlog
-        ax.set_xscale('symlog', linthresh=candidate_list[1])
-        ax.set_xticks(candidate_list)
-        ax.set_xticklabels(candidate_list, rotation=45)
-        ax.axvline(candidate_list[optimal_idx], color='red', linestyle='--')
-        
-        ax.set_xlabel('lambda_r')
         if use_likelihood:
-            ax.set_ylabel('average negative log-likelihood')
+            y_label = 'average negative log-likelihood'
         else:
-            ax.set_ylabel('average theta RMSE')
+            y_label = 'average theta RMSE'
         
-        fig.tight_layout()
-        fig.savefig(os.path.join(output_path, 'tuning lambda_r.png'))
-        plt.close()
+        from diagnosis_plots import diagnosisParamsTuning
+        diagnosisParamsTuning(candidate_list, avg_rmse_list, optimal_idx, 'lambda_r', y_label)
+        
 
     return candidate_list[optimal_idx]
     
@@ -535,26 +522,14 @@ def cv_find_lambda_g(data, G, theta_mask, gamma_g, sigma2, candidate_list, hybri
         
     # draw plot
     if diagnosis:
-        import matplotlib.pyplot as plt
-        import seaborn as sns
-        sns.set()
         
-        fig, ax = plt.subplots()
-        ax.plot(candidate_list[:len(avg_rmse_list)], avg_rmse_list, marker='o')
-        # log scale do not support 0, so use symlog
-        ax.set_xscale('symlog', linthresh=candidate_list[1])
-        ax.set_xticks(candidate_list)
-        ax.set_xticklabels(candidate_list, rotation=45)
-        ax.axvline(candidate_list[optimal_idx], color='red', linestyle='--')
-        
-        ax.set_xlabel('lambda_g')
         if use_likelihood:
-            ax.set_ylabel('average negative log-likelihood')
+            y_label = 'average negative log-likelihood'
         else:
-            ax.set_ylabel('average theta RMSE')
+            y_label = 'average theta RMSE'
         
-        fig.tight_layout()
-        fig.savefig(os.path.join(output_path, 'tuning lambda_g.png'))
-        plt.close()
+        from diagnosis_plots import diagnosisParamsTuning
+        diagnosisParamsTuning(candidate_list, avg_rmse_list, optimal_idx, 'lambda_g', y_label)
+    
     
     return candidate_list[optimal_idx]

@@ -33,6 +33,14 @@ cvaeglrm
    :undoc-members:
    :show-inheritance:
 
+diagnosis\_plots
+----------------
+
+.. automodule:: diagnosis_plots
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 hyper\_parameter\_optimization
 ------------------------------
 

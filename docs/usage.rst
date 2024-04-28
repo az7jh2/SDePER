@@ -3,7 +3,7 @@ Usage
 
 .. note::
 
-   For tutorials on using SDePER, please refer to the simulated and real data analysis examples in our GitHub repository `SDePER_Analysis <https://github.com/az7jh2/SDePER_Analysis>`_.
+   For tutorials on using SDePER, please refer to the `simulated <https://github.com/az7jh2/SDePER_Analysis/tree/main/Simulation>`_ and `real data analysis <https://github.com/az7jh2/SDePER_Analysis/tree/main/RealData>`_ examples in our GitHub repository `SDePER_Analysis <https://github.com/az7jh2/SDePER_Analysis>`_.
 
 
 .. _deconvolution_usage:
@@ -22,7 +22,7 @@ To start cell type deconvolution with default settings, run:
 
 .. tabs::
 
-   .. tab:: pip
+   .. tab:: conda / pip
 
       .. code-block:: bash
 
@@ -66,7 +66,7 @@ To start imputation with default settings, run:
 
 .. tabs::
 
-   .. tab:: pip
+   .. tab:: conda / pip
 
       .. code-block:: bash
 
@@ -101,7 +101,7 @@ To start imputation with default settings, run:
 
    .. tabs::
 
-      .. tab:: pip
+      .. tab:: conda / pip
 
          .. code-block:: bash
 

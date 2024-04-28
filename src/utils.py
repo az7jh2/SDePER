@@ -13,7 +13,7 @@ this script stores utils functions
 import os
 import numpy as np
 import pandas as pd
-from config import print, output_path
+from config import print, diagnosis_path
 import scanpy as sc
 sc.settings.verbosity = 0  # verbosity: errors (0), warnings (1), info (2), hints (3)
 
@@ -368,7 +368,8 @@ def run_DE(sc_obj, n_marker_per_cmp, use_fdr, p_val_cutoff, fc_cutoff, pct1_cuto
     print(f'finally selected {len(scrna_marker_genes)} cell-type marker genes\n')
     
     if save_result:
-        pd.concat(de_result_list).to_csv(os.path.join(output_path, save_file_name), index=False)
+        os.makedirs(os.path.join(diagnosis_path, 'celltype_markers'), exist_ok=True)
+        pd.concat(de_result_list).to_csv(os.path.join(diagnosis_path, 'celltype_markers', save_file_name)+'.gz', index=False, compression='gzip')
     
     return scrna_marker_genes
 
@@ -425,7 +426,7 @@ def run_DE_only(ref_file, ref_anno_file, spatial_genes, n_marker_per_cmp, use_fd
     scrna_obj = scrna_obj[:, overlap_genes].copy()
     
     # DE
-    marker_genes = run_DE(scrna_obj, n_marker_per_cmp, use_fdr, p_val_cutoff, fc_cutoff, pct1_cutoff, pct2_cutoff, sortby_fc, save_result, 'DE celltype markers.csv')
+    marker_genes = run_DE(scrna_obj, n_marker_per_cmp, use_fdr, p_val_cutoff, fc_cutoff, pct1_cutoff, pct2_cutoff, sortby_fc, save_result, 'DE_celltype_markers.csv')
     
     # generate average gene expressions (gene signature) for cell-types based on normalized values
     tmp_df = sc.get.obs_df(scrna_obj, keys=marker_genes)
@@ -497,7 +498,7 @@ def rerun_DE(scRNA_df, scRNA_celltype, n_marker_per_cmp, use_fdr, p_val_cutoff, 
     
     # do not normalize by sequencing depth as it's already normalized
     # so directly run DE on values in AnnData.X
-    return run_DE(scrna_obj, n_marker_per_cmp, use_fdr, p_val_cutoff, fc_cutoff, pct1_cutoff, pct2_cutoff, sortby_fc, save_result, 'redo DE celltype markers.csv')
+    return run_DE(scrna_obj, n_marker_per_cmp, use_fdr, p_val_cutoff, fc_cutoff, pct1_cutoff, pct2_cutoff, sortby_fc, save_result, 'redo_DE_celltype_markers.csv')
 
 
 

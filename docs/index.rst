@@ -15,6 +15,9 @@ Welcome to SDePER's documentation!
 .. image:: https://img.shields.io/pypi/v/sdeper
    :target: https://pypi.org/project/sdeper/
    :alt: PyPI version
+.. image:: https://img.shields.io/conda/vn/bioconda/sdeper
+   :target: https://anaconda.org/bioconda/sdeper
+   :alt: Conda Version
 .. image:: https://img.shields.io/docker/v/az7jh2/sdeper?label=docker
    :target: https://hub.docker.com/repository/docker/az7jh2/sdeper/general
    :alt: Docker Image Version (latest by date))
@@ -29,7 +32,13 @@ SDePER (\ **S**\ patial **De**\ convolution method with **P**\ latform **E**\ ff
 Quick Start
 -----------
 
-SDePER can be installed using pip:
+SDePER can be installed using conda
+
+   .. code-block:: bash
+
+      conda create -n sdeper-env -c bioconda -c conda-forge python=3.9.12 sdeper
+
+or pip
 
    .. code-block:: bash
 
