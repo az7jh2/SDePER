@@ -2,6 +2,7 @@ sphinx-substitution-extensions
 sphinx-tabs
 sphinx-toolbox
 sphinxcontrib-jquery
+sphinx-rtd-theme
 numpy
 scipy
 pandas
