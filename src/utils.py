@@ -301,7 +301,9 @@ def run_DE(sc_obj, n_marker_per_cmp, use_fdr, p_val_cutoff, fc_cutoff, pct1_cuto
         pct_dict[this_celltype] = calc_pct(sc_obj, this_celltype)
     
     # perform test
-    for this_celltype in celltypes:
+    for t, this_celltype in enumerate(celltypes):
+        
+        print(f'{t/len(celltypes):.0%}...', end='')
         
         for other_celltype in celltypes:
             if this_celltype == other_celltype:
@@ -412,6 +414,8 @@ def run_DE_only(ref_file, ref_anno_file, spatial_genes, n_marker_per_cmp, use_fd
         
     Returns
     -------
+    scrna_obj : AnnData object
+        a AnnData object for scRNA-seq data
     marker_gene_profile : DataFrame
         average gene expressions of identified cell-type specific marker genes from refer scRNA-seq data
     '''
@@ -435,7 +439,7 @@ def run_DE_only(ref_file, ref_anno_file, spatial_genes, n_marker_per_cmp, use_fd
 
     tmp_df = tmp_df.groupby(['celltype']).mean()
     
-    return tmp_df
+    return scrna_obj, tmp_df
 
 
 

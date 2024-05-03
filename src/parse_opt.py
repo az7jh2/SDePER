@@ -23,8 +23,8 @@ import copy
 # default value for options
 default_paramdict = {'spatial_file': None, 'ref_file': None, 'ref_celltype_file': None, 'marker_file': None, 'loc_file': None, 'A_file': None,
                      'n_cores': 1, 'threshold': 0, 'use_cvae': True, 'use_imputation': False, 'diagnosis': False, 'verbose': True,
-                     'use_fdr': True, 'p_val_cutoff': 0.05, 'fc_cutoff': 1.2, 'pct1_cutoff': 0.3, 'pct2_cutoff': 0.1, 'sortby_fc': True, 'n_marker_per_cmp': 10, 'filter_cell': True, 'filter_gene': True,
-                     'n_hv_gene': 200,  'n_pseudo_spot': 500000, 'pseudo_spot_min_cell': 2, 'pseudo_spot_max_cell':8, 'seq_depth_scaler': 10000, 'cvae_input_scaler': 10, 'cvae_init_lr':0.01, 'num_hidden_layer': 2, 'redo_de': True, 'seed': 383,
+                     'use_fdr': True, 'p_val_cutoff': 0.05, 'fc_cutoff': 1.2, 'pct1_cutoff': 0.3, 'pct2_cutoff': 0.1, 'sortby_fc': True, 'n_marker_per_cmp': 20, 'filter_cell': True, 'filter_gene': True,
+                     'n_hv_gene': 200,  'n_pseudo_spot': 500000, 'pseudo_spot_min_cell': 2, 'pseudo_spot_max_cell':8, 'seq_depth_scaler': 10000, 'cvae_input_scaler': 10, 'cvae_init_lr':0.01, 'num_hidden_layer': 2, 'use_batch_norm': True, 'cvae_train_epoch': 500, 'use_spatial_pseudo': False, 'redo_de': True, 'seed': 383,
                      'lambda_r': None, 'lambda_r_range_min': 0.1, 'lambda_r_range_max': 100, 'lambda_r_range_k': 8,
                      'lambda_g': None, 'lambda_g_range_min': 0.1, 'lambda_g_range_max': 100, 'lambda_g_range_k': 8,
                      'diameter': 200, 'impute_diameter': [160, 114, 80]
@@ -106,6 +106,9 @@ runDeconvolution [option][value]...
     --cvae_input_scaler     maximum value of the scaled input for CVAE input layer. Default value is {default_paramdict["cvae_input_scaler"]}, i.e. linearly scale all the sequencing depth normalized gene expressions to range [0, {default_paramdict["cvae_input_scaler"]}].
     --cvae_init_lr          initial learning rate for training CVAE. Default value is {default_paramdict["cvae_init_lr"]}. Although learning rate will decreasing automatically during training, large initial learning rate will cause training failure at the very beginning of training. If loss function value do NOT monotonically decrease, please try smaller initial learning rate.
     --num_hidden_layer      number of hidden layers in encoder and decoder of CVAE. Default value is {default_paramdict["num_hidden_layer"]}. The number of neurons in each hidden layer will be determined automatically.
+    --use_batch_norm        whether to use Batch Normalization in CVAE training. Default value is {default_paramdict["use_batch_norm"]}. If true, enables Batch Normalization in CVAE training.
+    --cvae_train_epoch      maximum number of training epochs for the CVAE. Default value is {default_paramdict["cvae_train_epoch"]}.
+    --use_spatial_pseudo    whether to generate "pseudo-spots" in spatial condition by randomly combining existing spatial spots in CVAE training. Default value is {default_paramdict["use_spatial_pseudo"]}. If true, half of the total number specified by option `n_pseudo_spot` will be created.
     --redo_de               control whether to redo Differential analysis on CVAE transformed scRNA-seq gene expressions to get a new set of marker gene list of cell-types (true/false). Default value is {default_paramdict["redo_de"]}. It's recommended to redo Differential analysis since CVAE transformation may change the marker gene profile of cell-types.
     --seed                  seed value of TensorFlow to control the randomness in building CVAE. Default value is {default_paramdict["seed"]}.
     
@@ -163,6 +166,9 @@ def parseOpt():
             cvae_input_scaler : maximum value of the scaled input for CVAE\n
             cvae_init_lr : initial learning rate for training CVAE\n
             num_hidden_layer : number of hidden layers in encoder and decoder\n
+            use_batch_norm : whether to use Batch Normalization\n
+            cvae_train_epoch : max number of training epochs for the CVAE\n
+            use_spatial_pseudo : whether to generate "pseudo-spots" in spatial condition\n
             redo_de : whether to redo DE after CVAE transformation\n
             seed : seed value for random in building CVAE\n
             diagnosis : True or False, if True save more information to files for diagnosis CVAE and hyper-parameter selection\n
@@ -190,7 +196,7 @@ def parseOpt():
     # 短选项名后的冒号(:)表示该选项必须有附加的参数
     # 长选项名后的等号(=)表示该选项必须有附加的参数
     shortargs = 'hq:r:c:m:l:a:o:n:v'
-    longargs = ['help', 'query=', 'ref=', 'ref_anno=', 'marker=', 'loc=', 'adjacency=', 'n_cores=', 'lambda_r=', 'lambda_r_range_min=', 'lambda_r_range_max=', 'lambda_r_range_k=', 'lambda_g=', 'lambda_g_range_min=', 'lambda_g_range_max=', 'lambda_g_range_k=', 'use_cvae=', 'threshold=', 'n_hv_gene=', 'n_marker_per_cmp=', 'n_pseudo_spot=', 'pseudo_spot_min_cell=', 'pseudo_spot_max_cell=', 'seq_depth_scaler=', 'cvae_input_scaler=', 'cvae_init_lr=', 'num_hidden_layer=', 'redo_de=', 'seed=', 'diagnosis=', 'verbose=', 'use_fdr=', 'p_val_cutoff=', 'fc_cutoff=', 'pct1_cutoff=', 'pct2_cutoff=', 'sortby_fc=', 'filter_cell=', 'filter_gene=', 'use_imputation=', 'diameter=', 'impute_diameter=', 'version']
+    longargs = ['help', 'query=', 'ref=', 'ref_anno=', 'marker=', 'loc=', 'adjacency=', 'n_cores=', 'lambda_r=', 'lambda_r_range_min=', 'lambda_r_range_max=', 'lambda_r_range_k=', 'lambda_g=', 'lambda_g_range_min=', 'lambda_g_range_max=', 'lambda_g_range_k=', 'use_cvae=', 'threshold=', 'n_hv_gene=', 'n_marker_per_cmp=', 'n_pseudo_spot=', 'pseudo_spot_min_cell=', 'pseudo_spot_max_cell=', 'seq_depth_scaler=', 'cvae_input_scaler=', 'cvae_init_lr=', 'num_hidden_layer=', 'use_batch_norm=', 'cvae_train_epoch=', 'use_spatial_pseudo=', 'redo_de=', 'seed=', 'diagnosis=', 'verbose=', 'use_fdr=', 'p_val_cutoff=', 'fc_cutoff=', 'pct1_cutoff=', 'pct2_cutoff=', 'sortby_fc=', 'filter_cell=', 'filter_gene=', 'use_imputation=', 'diameter=', 'impute_diameter=', 'version']
     
   
     # 解析命令行参数
@@ -519,6 +525,38 @@ def parseOpt():
                     paramdict['num_hidden_layer'] = 1
             except:
                 print(f'WARNING: unrecognized option value `{val}` for num_hidden_layer! Please use numeric value. Currently num_hidden_layer is set to be default value `{default_paramdict["num_hidden_layer"]}`!')
+            continue
+        
+        
+        if opt in ('--use_batch_norm'):
+            if val.casefold() == 'true'.casefold():
+                paramdict['use_batch_norm'] = True
+            elif val.casefold() == 'false'.casefold():
+                paramdict['use_batch_norm'] = False
+            else:
+                print(f'WARNING: unrecognized option value `{val}` for use_batch_norm! Please use string of true or false. Currently use_batch_norm is set to be default value `{default_paramdict["use_batch_norm"]}`!')
+            continue
+        
+        
+        if opt in ('--cvae_train_epoch'):
+            try:
+                paramdict['cvae_train_epoch'] = int(float(val))
+                
+                if paramdict['cvae_train_epoch'] < 30:
+                    print(f'WARNING: invalid option value `{paramdict["cvae_train_epoch"]}` for cvae_train_epoch! Please use integer which >= 30. Currently cvae_train_epoch is set to be value `30`!')
+                    paramdict['cvae_train_epoch'] = 30
+            except:
+                print(f'WARNING: unrecognized option value `{val}` for cvae_train_epoch! Please use numeric value. Currently cvae_train_epoch is set to be default value `{default_paramdict["cvae_train_epoch"]}`!')
+            continue
+        
+        
+        if opt in ('--use_spatial_pseudo'):
+            if val.casefold() == 'true'.casefold():
+                paramdict['use_spatial_pseudo'] = True
+            elif val.casefold() == 'false'.casefold():
+                paramdict['use_spatial_pseudo'] = False
+            else:
+                print(f'WARNING: unrecognized option value `{val}` for use_spatial_pseudo! Please use string of true or false. Currently use_spatial_pseudo is set to be default value `{default_paramdict["use_spatial_pseudo"]}`!')
             continue
         
         

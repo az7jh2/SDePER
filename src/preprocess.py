@@ -30,7 +30,7 @@ from config import print
 
 
 
-def preprocess(spatial_file, ref_file, ref_anno_file, marker_file, A_file, use_cvae, n_hv_gene, n_marker_per_cmp, n_pseudo_spot, pseudo_spot_min_cell, pseudo_spot_max_cell, seq_depth_scaler, cvae_input_scaler, cvae_init_lr, num_hidden_layer, redo_de, use_fdr, p_val_cutoff, fc_cutoff, pct1_cutoff, pct2_cutoff, sortby_fc, filter_cell, filter_gene, diagnosis):
+def preprocess(spatial_file, ref_file, ref_anno_file, marker_file, A_file, use_cvae, n_hv_gene, n_marker_per_cmp, n_pseudo_spot, pseudo_spot_min_cell, pseudo_spot_max_cell, seq_depth_scaler, cvae_input_scaler, cvae_init_lr, num_hidden_layer, use_batch_norm, cvae_train_epoch, use_spatial_pseudo, redo_de, use_fdr, p_val_cutoff, fc_cutoff, pct1_cutoff, pct2_cutoff, sortby_fc, filter_cell, filter_gene, diagnosis):
     '''
     preprocess files
 
@@ -66,6 +66,12 @@ def preprocess(spatial_file, ref_file, ref_anno_file, marker_file, A_file, use_c
         initial learning rate for training CVAE.
     num_hidden_layer : int
         number of hidden layers in encoder and decoder.
+    use_batch_norm : bool
+        whether to use Batch Normalization.
+    cvae_train_epoch : int
+        max number of training epochs for the CVAE.
+    use_spatial_pseudo : int
+        whether to generate "pseudo-spots" in spatial condition.
     redo_de : bool
         whether to redo DE after CVAE transformation.
     use_fdr : bool
@@ -108,7 +114,7 @@ def preprocess(spatial_file, ref_file, ref_anno_file, marker_file, A_file, use_c
             
         print('first build CVAE...\n')
         # build CVAE, and return the data dict including transformed spatial data and reference gene expression
-        spatial_df, cvae_marker_df, new_markers = build_CVAE_whole(spatial_file, ref_file, ref_anno_file, marker_file, n_hv_gene, n_marker_per_cmp, n_pseudo_spot, pseudo_spot_min_cell, pseudo_spot_max_cell, seq_depth_scaler, cvae_input_scaler, cvae_init_lr, num_hidden_layer, redo_de, use_fdr, p_val_cutoff, fc_cutoff, pct1_cutoff, pct2_cutoff, sortby_fc, diagnosis, filter_cell, filter_gene)
+        spatial_df, cvae_marker_df, new_markers = build_CVAE_whole(spatial_file, ref_file, ref_anno_file, marker_file, n_hv_gene, n_marker_per_cmp, n_pseudo_spot, pseudo_spot_min_cell, pseudo_spot_max_cell, seq_depth_scaler, cvae_input_scaler, cvae_init_lr, num_hidden_layer, use_batch_norm, cvae_train_epoch, use_spatial_pseudo, redo_de, use_fdr, p_val_cutoff, fc_cutoff, pct1_cutoff, pct2_cutoff, sortby_fc, diagnosis, filter_cell, filter_gene)
         
         # calculate squencing depth, sum also works on sparse dataframe
         N = spatial_df.sum(axis=1)
@@ -168,8 +174,9 @@ def preprocess(spatial_file, ref_file, ref_anno_file, marker_file, A_file, use_c
         else:
             # perform DE, return the marker gene expression. The identified markers but not in spatial data has already been removed
             print('no marker gene profile provided. Perform DE to get cell-type marker genes on scRNA-seq data...\n')
-            marker_df = run_DE_only(ref_file, ref_anno_file, spatial_df.columns.tolist(), n_marker_per_cmp, use_fdr, p_val_cutoff, fc_cutoff, pct1_cutoff, pct2_cutoff, sortby_fc, diagnosis, filter_cell, filter_gene)
-            marker_genes = marker_df.columns
+            tmp_scrna_obj, marker_df = run_DE_only(ref_file, ref_anno_file, spatial_df.columns.tolist(), n_marker_per_cmp, use_fdr, p_val_cutoff, fc_cutoff, pct1_cutoff, pct2_cutoff, sortby_fc, diagnosis, filter_cell, filter_gene)
+            # note dataframe index and columns returns a RangeIndex object rather than list
+            marker_genes = marker_df.columns.to_list()
     
     else:
         
@@ -217,6 +224,16 @@ def preprocess(spatial_file, ref_file, ref_anno_file, marker_file, A_file, use_c
             A_df.drop(exclude_spots, axis=1, inplace=True)
     else:
         print('all spots passed filtering')
+        
+        
+    if diagnosis and not use_cvae:
+        # plot UMAP for raw input gene expressions here
+        import scanpy as sc
+        from diagnosis_plots import defineColor, rawInputUMAP
+        tmp_scrna_celltype = sc.get.obs_df(tmp_scrna_obj, keys='celltype').to_frame()
+        tmp_scrna_celltype['celltype'] = tmp_scrna_celltype['celltype'].astype(str)
+        plot_colors = defineColor(spatial_df.shape[0], tmp_scrna_celltype)
+        rawInputUMAP(spatial_df, sc.get.obs_df(tmp_scrna_obj, keys=marker_genes), tmp_scrna_celltype, plot_colors)
 
     
     # record the zeros in spatial data if filtering zeros is turned on

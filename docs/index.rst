@@ -6,6 +6,8 @@
 Welcome to SDePER's documentation!
 =====================================
 
+.. image:: https://img.shields.io/badge/os-linux-blue
+   :alt: OS
 .. image:: https://img.shields.io/pypi/pyversions/sdeper
    :target: https://www.python.org/
    :alt: Python version
@@ -31,6 +33,8 @@ SDePER (\ **S**\ patial **De**\ convolution method with **P**\ latform **E**\ ff
 
 Quick Start
 -----------
+
+SDePER currently supports only Linux operating systems such as Ubuntu, and is compatible with Python versions 3.9.12 up to but not including 3.11.
 
 SDePER can be installed using conda
 

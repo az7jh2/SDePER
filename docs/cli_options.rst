@@ -221,11 +221,11 @@ Cell type marker identification options
 
    :Type: integer
 
-   :Default: ``10``
+   :Default: ``20``
 
-   .. versionchanged:: 1.1.0
+   .. versionchanged:: 1.2.1
 
-      Default value changed from 30 to 10.
+      Default value changed from 30 to 20.
 
 
 .. option:: --use_fdr
@@ -430,6 +430,39 @@ CVAE-related options
    :Default: ``2``
 
    .. versionadded:: 1.2.0
+
+
+.. option:: --use_batch_norm
+
+   Whether to use Batch Normalization in CVAE training.
+
+   :Type: boolean
+
+   :Default: ``true``
+
+   .. versionadded:: 1.2.1
+
+
+.. option:: --cvae_train_epoch
+
+   Maximum number of training epochs for the CVAE.
+
+   :Type: int
+
+   :Default: ``500``
+
+   .. versionadded:: 1.2.1
+
+
+.. option:: --use_spatial_pseudo
+
+   Whether to generate "pseudo-spots" in spatial condition by randomly combining existing spatial spots in CVAE training. When true, half of the total number specified by :option:`n_pseudo_spot` will be created.
+
+   :Type: boolean
+
+   :Default: ``false``
+
+   .. versionadded:: 1.2.1
 
 
 .. option:: --redo_de

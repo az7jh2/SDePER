@@ -1,6 +1,20 @@
 Changelog
 =========
 
+Version 1.2.1 (2024-05-03)
+--------------------------
+
+**Updates**:
+
+* Implemented a GitHub Action triggered by new release publications to test the package installation (`#10 <https://github.com/az7jh2/SDePER/issues/10>`_).
+
+* Added a diagnostic UMAP plot of raw data before platform effect removal using CVAE. Also included new diagnostic plots depicting CVAE training loss.
+
+* Changed the default value of the :option:`--n_marker_per_cmp` command-line option to 20.
+
+* Added three command-line options: :option:`--use_batch_norm`, :option:`--use_spatial_pseudo` and :option:`--cvae_train_epoch`.
+
+
 Version 1.2.0 (2024-04-28)
 --------------------------
 

@@ -1,0 +1,393 @@
+# ref https://github.com/marketplace/actions/setup-miniconda
+
+# This workflow uses actions that are not certified by GitHub.
+# They are provided by a third-party and are governed by
+# separate terms of service, privacy policy, and support
+# documentation.
+
+# GitHub recommends pinning actions to a commit SHA.
+# To get a newer version, you will need to update the SHA.
+# You can also reference a tag or branch, but the action may change without warning.
+
+# By default, GitHub Actions uses different shells based on the runner operating system:
+# Ubuntu (Linux) and macOS: bash
+# Windows: cmd
+
+# We can test SDePER installation on multiple OS by setting os: ["ubuntu-latest", "macos-latest", "windows-latest"]
+# but installation would fail in macOS and Windows...
+
+name: Test SDePER installation across PyPI, Conda, and Docker
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  test-pypi:
+    name: test-pypi (${{ matrix.python-version }}, ${{ matrix.os }})
+    environment: package-test  # specify the environment
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        # bash login mode is needed for activate environment in Ubuntu and macOS (ref https://github.com/marketplace/actions/setup-miniconda#important)
+        # cmd in Windows is fine
+        shell: bash -el {0}  # `-e` means the shell will stop executing if any command returns a non-zero status (error). `-l` makes Bash act as if it had been invoked as a login shell
+    strategy:
+      fail-fast: false  # all job combinations will run to completion even if one of them fails
+      matrix:  # uses a matrix strategy to run multiple test configurations across different operating systems and Python versions
+        os: ["ubuntu-latest"]
+        python-version: ["3.9.12", "3.10"]
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Download test files # note to use URL for the raw file
+        shell: pwsh  # Changed the shell to PowerShell for all platforms to ensure consistency in command syntax and behavior across all operating systems
+        run: |
+          # a function to decompress .gz file using PowerShell (https://learn.microsoft.com/en-us/archive/msdn-technet-forums/5aa53fef-5229-4313-a035-8b3a38ab93f5)
+          Function DeGZip-File{
+            Param(
+              $infile,
+              $outfile = ($infile -replace '\.gz$','')
+            )
+
+            $input = New-Object System.IO.FileStream $inFile, ([IO.FileMode]::Open), ([IO.FileAccess]::Read), ([IO.FileShare]::Read)
+            $output = New-Object System.IO.FileStream $outFile, ([IO.FileMode]::Create), ([IO.FileAccess]::Write), ([IO.FileShare]::None)
+            $gzipStream = New-Object System.IO.Compression.GzipStream $input, ([IO.Compression.CompressionMode]::Decompress)
+
+            $buffer = New-Object byte[](1024)
+            while($true){
+              $read = $gzipstream.Read($buffer, 0, 1024)
+              if ($read -le 0){break}
+              $output.Write($buffer, 0, $read)
+            }
+
+            $gzipStream.Close()
+            $output.Close()
+            $input.Close()
+          }
+
+          $urls = @(
+            "https://raw.githubusercontent.com/az7jh2/SDePER_Analysis/main/RealData/MOB/MOB_spatial_spot_nUMI.csv",
+            "https://raw.githubusercontent.com/az7jh2/SDePER_Analysis/main/RealData/MOB/MOB_ref_scRNA_cell_celltype.csv",
+            "https://github.com/az7jh2/SDePER_Analysis/raw/main/RealData/MOB/MOB_ref_scRNA_cell_nUMI.csv.gz",
+            "https://raw.githubusercontent.com/az7jh2/SDePER_Analysis/main/RealData/MOB/MOB_spatial_spot_adjacency_matrix.csv",
+            "https://raw.githubusercontent.com/az7jh2/SDePER_Analysis/main/RealData/MOB/MOB_spatial_spot_loc.csv"
+          )
+          foreach ($url in $urls) {
+            Invoke-WebRequest -Uri $url -OutFile ($url -split "/" | Select-Object -Last 1)
+          }
+          DeGZip-File MOB_ref_scRNA_cell_nUMI.csv.gz
+
+      - uses: conda-incubator/setup-miniconda@v3  # create and activate an mostly-empty environment named test, containing only the latest `python-version` and its dependencies
+        with:
+          auto-update-conda: true
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install SDePER package
+        run: |
+          pip install --upgrade pip
+          pip install sdeper
+      
+      - name: Extract version number from tag  # note to create an environment variable for later reference
+        run: |
+          TAG_NAME="${{ github.event.release.tag_name }}"
+          echo "VERSION_NUMBER=${TAG_NAME#v}" >> $GITHUB_ENV
+          
+      - name: Test version
+        run: |
+          PACKAGE_VERSION=$(runDeconvolution -v | tail -n 1 | grep -o 'v[0-9]\+\.[0-9]\+\.[0-9]\+')
+          if [ "$PACKAGE_VERSION" == "${{ env.VERSION_NUMBER }}" ]; then
+            echo "Version matches: $PACKAGE_VERSION"
+          else
+            echo "Version mismatch. Expected ${{ env.VERSION_NUMBER }}, but got $PACKAGE_VERSION"
+            exit 1
+          fi
+          
+      - name: Test GLRM
+        run: |
+          runDeconvolution -q MOB_spatial_spot_nUMI.csv \
+                           -r MOB_ref_scRNA_cell_nUMI.csv \
+                           -c MOB_ref_scRNA_cell_celltype.csv \
+                           -a MOB_spatial_spot_adjacency_matrix.csv \
+                           -l MOB_spatial_spot_loc.csv \
+                           --n_marker_per_cmp 5 \
+                           -n 64 \
+                           -use_cvae false \
+                           --lambda_r 0 \
+                           --lambda_g 0 \
+                           --use_imputation false \
+                           --diagnosis true \
+                           --verbose false
+      
+      - name: Test SDePER
+        run: |
+          runDeconvolution -q MOB_spatial_spot_nUMI.csv \
+                           -r MOB_ref_scRNA_cell_nUMI.csv \
+                           -c MOB_ref_scRNA_cell_celltype.csv \
+                           -a MOB_spatial_spot_adjacency_matrix.csv \
+                           -l MOB_spatial_spot_loc.csv \
+                           --n_hv_gene 20 \
+                           --n_marker_per_cmp 5 \
+                           --n_pseudo_spot 500 \
+                           --num_hidden_layer 1 \
+                           --use_batch_norm false \
+                           --cvae_train_epoch 100 \
+                           --use_spatial_pseudo true \
+                           -n 64 \
+                           --lambda_r_range_max 20 \
+                           --lambda_r_range_k 2 \
+                           --lambda_g_range_max 20 \
+                           --lambda_g_range_k 2 \
+                           --use_imputation false \
+                           --diagnosis true \
+                           --verbose false
+      
+      - name: Print result
+        run: |
+          python --version
+          runDeconvolution -v
+          head celltype_proportions.csv -n 5
+          
+          
+  test-conda:
+    name: test-conda (${{ matrix.python-version }}, ${{ matrix.os }})
+    environment: package-test  # specify the environment
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        # bash login mode is needed for activate environment in Ubuntu and macOS (ref https://github.com/marketplace/actions/setup-miniconda#important)
+        # cmd in Windows is fine
+        shell: bash -el {0}  # `-e` means the shell will stop executing if any command returns a non-zero status (error). `-l` makes Bash act as if it had been invoked as a login shell
+    strategy:
+      fail-fast: false  # all job combinations will run to completion even if one of them fails
+      matrix:  # uses a matrix strategy to run multiple test configurations across different operating systems and Python versions
+        os: ["ubuntu-latest"]
+        python-version: ["3.9.12", "3.10"]
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Download test files # note to use URL for the raw file
+        shell: pwsh  # Changed the shell to PowerShell for all platforms to ensure consistency in command syntax and behavior across all operating systems
+        run: |
+          # a function to decompress .gz file using PowerShell (https://learn.microsoft.com/en-us/archive/msdn-technet-forums/5aa53fef-5229-4313-a035-8b3a38ab93f5)
+          Function DeGZip-File{
+            Param(
+              $infile,
+              $outfile = ($infile -replace '\.gz$','')
+            )
+
+            $input = New-Object System.IO.FileStream $inFile, ([IO.FileMode]::Open), ([IO.FileAccess]::Read), ([IO.FileShare]::Read)
+            $output = New-Object System.IO.FileStream $outFile, ([IO.FileMode]::Create), ([IO.FileAccess]::Write), ([IO.FileShare]::None)
+            $gzipStream = New-Object System.IO.Compression.GzipStream $input, ([IO.Compression.CompressionMode]::Decompress)
+
+            $buffer = New-Object byte[](1024)
+            while($true){
+              $read = $gzipstream.Read($buffer, 0, 1024)
+              if ($read -le 0){break}
+              $output.Write($buffer, 0, $read)
+            }
+
+            $gzipStream.Close()
+            $output.Close()
+            $input.Close()
+          }
+
+          $urls = @(
+            "https://raw.githubusercontent.com/az7jh2/SDePER_Analysis/main/RealData/MOB/MOB_spatial_spot_nUMI.csv",
+            "https://raw.githubusercontent.com/az7jh2/SDePER_Analysis/main/RealData/MOB/MOB_ref_scRNA_cell_celltype.csv",
+            "https://github.com/az7jh2/SDePER_Analysis/raw/main/RealData/MOB/MOB_ref_scRNA_cell_nUMI.csv.gz",
+            "https://raw.githubusercontent.com/az7jh2/SDePER_Analysis/main/RealData/MOB/MOB_spatial_spot_adjacency_matrix.csv",
+            "https://raw.githubusercontent.com/az7jh2/SDePER_Analysis/main/RealData/MOB/MOB_spatial_spot_loc.csv"
+          )
+          foreach ($url in $urls) {
+            Invoke-WebRequest -Uri $url -OutFile ($url -split "/" | Select-Object -Last 1)
+          }
+          DeGZip-File MOB_ref_scRNA_cell_nUMI.csv.gz
+
+      - uses: conda-incubator/setup-miniconda@v3  # create and activate an mostly-empty environment named test, containing only the latest `python-version` and its dependencies
+        with:
+          auto-update-conda: true
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install SDePER package
+        run: |
+          conda install -c bioconda -c conda-forge sdeper
+          
+      - name: Extract version number from tag  # note to create an environment variable for later reference
+        run: |
+          TAG_NAME="${{ github.event.release.tag_name }}"
+          echo "VERSION_NUMBER=${TAG_NAME#v}" >> $GITHUB_ENV
+          
+      - name: Test version
+        run: |
+          PACKAGE_VERSION=$(runDeconvolution -v | tail -n 1 | grep -o 'v[0-9]\+\.[0-9]\+\.[0-9]\+')
+          if [ "$PACKAGE_VERSION" == "${{ env.VERSION_NUMBER }}" ]; then
+            echo "Version matches: $PACKAGE_VERSION"
+          else
+            echo "Version mismatch. Expected ${{ env.VERSION_NUMBER }}, but got $PACKAGE_VERSION"
+            exit 1
+          fi
+      
+      - name: Test GLRM
+        run: |
+          runDeconvolution -q MOB_spatial_spot_nUMI.csv \
+                           -r MOB_ref_scRNA_cell_nUMI.csv \
+                           -c MOB_ref_scRNA_cell_celltype.csv \
+                           -a MOB_spatial_spot_adjacency_matrix.csv \
+                           -l MOB_spatial_spot_loc.csv \
+                           --n_marker_per_cmp 5 \
+                           -n 64 \
+                           -use_cvae false \
+                           --lambda_r 0 \
+                           --lambda_g 0 \
+                           --use_imputation false \
+                           --diagnosis true \
+                           --verbose false
+      
+      - name: Test SDePER
+        run: |
+          runDeconvolution -q MOB_spatial_spot_nUMI.csv \
+                           -r MOB_ref_scRNA_cell_nUMI.csv \
+                           -c MOB_ref_scRNA_cell_celltype.csv \
+                           -a MOB_spatial_spot_adjacency_matrix.csv \
+                           -l MOB_spatial_spot_loc.csv \
+                           --n_hv_gene 20 \
+                           --n_marker_per_cmp 5 \
+                           --n_pseudo_spot 500 \
+                           --num_hidden_layer 1 \
+                           --use_batch_norm false \
+                           --cvae_train_epoch 100 \
+                           --use_spatial_pseudo true \
+                           -n 64 \
+                           --lambda_r_range_max 20 \
+                           --lambda_r_range_k 2 \
+                           --lambda_g_range_max 20 \
+                           --lambda_g_range_k 2 \
+                           --use_imputation false \
+                           --diagnosis true \
+                           --verbose false
+                           
+      - name: Print result
+        run: |
+          python --version
+          runDeconvolution -v
+          head celltype_proportions.csv -n 5
+          
+          
+  test-docker:
+    name: test-docker (${{ matrix.os }})
+    environment: package-test  # specify the environment
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        # bash login mode is needed for activate environment in Ubuntu and macOS (ref https://github.com/marketplace/actions/setup-miniconda#important)
+        # cmd in Windows is fine
+        shell: bash -el {0}  # `-e` means the shell will stop executing if any command returns a non-zero status (error). `-l` makes Bash act as if it had been invoked as a login shell
+    strategy:
+      fail-fast: false  # all job combinations will run to completion even if one of them fails
+      matrix:  # uses a matrix strategy to run multiple test configurations across different operating systems and Python versions
+        os: ["ubuntu-latest"]
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Download test files # note to use URL for the raw file
+        shell: pwsh  # Changed the shell to PowerShell for all platforms to ensure consistency in command syntax and behavior across all operating systems
+        run: |
+          # a function to decompress .gz file using PowerShell (https://learn.microsoft.com/en-us/archive/msdn-technet-forums/5aa53fef-5229-4313-a035-8b3a38ab93f5)
+          Function DeGZip-File{
+            Param(
+              $infile,
+              $outfile = ($infile -replace '\.gz$','')
+            )
+
+            $input = New-Object System.IO.FileStream $inFile, ([IO.FileMode]::Open), ([IO.FileAccess]::Read), ([IO.FileShare]::Read)
+            $output = New-Object System.IO.FileStream $outFile, ([IO.FileMode]::Create), ([IO.FileAccess]::Write), ([IO.FileShare]::None)
+            $gzipStream = New-Object System.IO.Compression.GzipStream $input, ([IO.Compression.CompressionMode]::Decompress)
+
+            $buffer = New-Object byte[](1024)
+            while($true){
+              $read = $gzipstream.Read($buffer, 0, 1024)
+              if ($read -le 0){break}
+              $output.Write($buffer, 0, $read)
+            }
+
+            $gzipStream.Close()
+            $output.Close()
+            $input.Close()
+          }
+
+          $urls = @(
+            "https://raw.githubusercontent.com/az7jh2/SDePER_Analysis/main/RealData/MOB/MOB_spatial_spot_nUMI.csv",
+            "https://raw.githubusercontent.com/az7jh2/SDePER_Analysis/main/RealData/MOB/MOB_ref_scRNA_cell_celltype.csv",
+            "https://github.com/az7jh2/SDePER_Analysis/raw/main/RealData/MOB/MOB_ref_scRNA_cell_nUMI.csv.gz",
+            "https://raw.githubusercontent.com/az7jh2/SDePER_Analysis/main/RealData/MOB/MOB_spatial_spot_adjacency_matrix.csv",
+            "https://raw.githubusercontent.com/az7jh2/SDePER_Analysis/main/RealData/MOB/MOB_spatial_spot_loc.csv"
+          )
+          foreach ($url in $urls) {
+            Invoke-WebRequest -Uri $url -OutFile ($url -split "/" | Select-Object -Last 1)
+          }
+          DeGZip-File MOB_ref_scRNA_cell_nUMI.csv.gz
+      
+      - name: Extract version number from tag  # note to create an environment variable for later reference
+        run: |
+          TAG_NAME="${{ github.event.release.tag_name }}"
+          echo "VERSION_NUMBER=${TAG_NAME#v}" >> $GITHUB_ENV
+          
+      - name: Download SDePER image with specific version
+        run: |
+          docker pull az7jh2/sdeper:${{ env.VERSION_NUMBER }}
+      
+      - name: Test version
+        run: |
+          PACKAGE_VERSION=$(docker run --rm az7jh2/sdeper:${{ env.VERSION_NUMBER }} runDeconvolution -v | tail -n 1 | grep -o 'v[0-9]\+\.[0-9]\+\.[0-9]\+')
+          if [ "$PACKAGE_VERSION" == "${{ env.VERSION_NUMBER }}" ]; then
+            echo "Version matches: $PACKAGE_VERSION"
+          else
+            echo "Version mismatch. Expected ${{ env.VERSION_NUMBER }}, but got $PACKAGE_VERSION"
+            exit 1
+          fi
+      
+      - name: Test GLRM
+        run: |
+          docker run --rm -v $(pwd):/data az7jh2/sdeper:${{ env.VERSION_NUMBER }} runDeconvolution -q MOB_spatial_spot_nUMI.csv \
+                           -r MOB_ref_scRNA_cell_nUMI.csv \
+                           -c MOB_ref_scRNA_cell_celltype.csv \
+                           -a MOB_spatial_spot_adjacency_matrix.csv \
+                           -l MOB_spatial_spot_loc.csv \
+                           --n_marker_per_cmp 5 \
+                           -n 64 \
+                           -use_cvae false \
+                           --lambda_r 0 \
+                           --lambda_g 0 \
+                           --use_imputation false \
+                           --diagnosis true \
+                           --verbose false
+      
+      - name: Test SDePER
+        run: |
+          docker run --rm -v $(pwd):/data az7jh2/sdeper:${{ env.VERSION_NUMBER }} runDeconvolution -q MOB_spatial_spot_nUMI.csv \
+                           -r MOB_ref_scRNA_cell_nUMI.csv \
+                           -c MOB_ref_scRNA_cell_celltype.csv \
+                           -a MOB_spatial_spot_adjacency_matrix.csv \
+                           -l MOB_spatial_spot_loc.csv \
+                           --n_hv_gene 20 \
+                           --n_marker_per_cmp 5 \
+                           --n_pseudo_spot 500 \
+                           --num_hidden_layer 1 \
+                           --use_batch_norm false \
+                           --cvae_train_epoch 100 \
+                           --use_spatial_pseudo true \
+                           -n 64 \
+                           --lambda_r_range_max 20 \
+                           --lambda_r_range_k 2 \
+                           --lambda_g_range_max 20 \
+                           --lambda_g_range_k 2 \
+                           --use_imputation false \
+                           --diagnosis true \
+                           --verbose false
+      
+      - name: Print result
+        run: |
+          docker run --rm az7jh2/sdeper:${{ env.VERSION_NUMBER }} python --version
+          docker run --rm az7jh2/sdeper:${{ env.VERSION_NUMBER }} runDeconvolution -v
+          head celltype_proportions.csv -n 5

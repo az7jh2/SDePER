@@ -12,7 +12,7 @@ We move all functions for generating diagnosis plots to here.
 
 import os
 from config import print, diagnosis_path
-from tensorflow.keras.utils import plot_model
+#from tensorflow.keras.utils import plot_model
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -26,7 +26,181 @@ from scipy.interpolate import griddata
 
 
 
-def diagnosisCVAE(cvae, encoder, decoder, spatial_embed, spatial_transformed_df, spatial_transformed_numi, pseudo_spatial_embed, scRNA_celltype, celltype_order, celltype_count_dict, scrna_cell_celltype_prop, scRNA_embed, pseudo_spots_celltype_prop, n_cell_in_spot, pseudo_spot_embed, scRNA_decode_df, scRNA_decode_avg_df, new_markers):
+def plotCVAELoss(history):
+    '''
+    plot training and validation loss in CVAE training
+
+    Parameters
+    ----------
+    history : History object
+        History object returned by Keras Model.fit in CVAE training.
+
+    Returns
+    -------
+    None.
+    '''
+    
+    # need to create subfolders first, otherwise got FileNotFoundError
+    os.makedirs(os.path.join(diagnosis_path, 'CVAE_training'), exist_ok=True)
+    
+    
+    # plot total loss
+    plt.figure(figsize=(6.4*2, 4.8*2))
+    plt.plot(history.history['loss'], label='Training')
+    if 'val_loss' in history.history:
+        plt.plot(history.history['val_loss'], label='Validation')
+    plt.ylabel('Total Loss')
+    plt.xlabel('Epoch')
+    plt.legend(loc='upper right')
+    plt.savefig(os.path.join(diagnosis_path, 'CVAE_training', 'CVAE_total_loss_in_training.png'))
+    plt.close()
+    
+    
+    # plot components of loss
+    plt.figure(figsize=(6.4*2, 4.8*2))
+    
+    # Training KL Loss
+    plt.plot(history.history['KL_loss'], color='#1f77b4', marker='o', label='Training KL Loss')
+    # Validation KL Loss
+    plt.plot(history.history['val_KL_loss'], color='#ff7f0e', marker='o', label='Validation KL Loss')
+
+    # Training Reconstruction Loss
+    plt.plot(history.history['reconstruction_loss'], color='#1f77b4', marker='s', linestyle='dashed', label='Training Reconstruction Loss')
+    # Validation Reconstruction Loss
+    plt.plot(history.history['val_reconstruction_loss'], color='#ff7f0e', marker='s', linestyle='dashed', label='Validation Reconstruction Loss')
+    
+    # Adding labels
+    plt.xlabel('Epoch')
+    plt.ylabel('Model Loss')
+    # Add a legend
+    plt.legend(loc='upper right')
+    plt.savefig(os.path.join(diagnosis_path, 'CVAE_training', 'CVAE_loss_components_in_training.png'))
+    plt.close()
+
+
+
+def defineColor(n_spatial_spot, scRNA_celltype):
+    '''
+    generate n visually distinct colours for cell-types. Use these colours across whole pipeline for consistency
+
+    Parameters
+    ----------
+    n_spatial_spot : int
+        number of spatial spots.
+    scRNA_celltype : dataframe
+        cell-type annotations for cells in scRNA-seq data. Only 1 column named <celltype>.
+
+    Returns
+    -------
+    plot_colors : dict
+        generated color palette, keys are cell-types together with the number of cells with this cell-type, and values are RGB colors.
+    '''
+    
+    celltype_order = sorted(list(scRNA_celltype.celltype.unique()))
+    celltype_count_dict = scRNA_celltype.celltype.value_counts().to_dict()
+    
+    plot_colors = {}
+    for one_celltype, one_color in zip([f'spatial ({n_spatial_spot})']+[f'{x} ({celltype_count_dict[x]})' for x in celltype_order], distinctipy.get_colors(len(celltype_order)+1)):
+        plot_colors[one_celltype] = one_color
+    # assign pseudo spots as gray80
+    plot_colors['pseudo'] = '#cccccc'
+    
+    return plot_colors
+
+
+
+def rawInputUMAP(spatial_df, scRNA_df, scRNA_celltype, plot_colors):
+    '''
+    generate UMAP of spatial spots together with scRNA-seq cells
+
+    Parameters
+    ----------
+    spatial_df : dataframe
+        normalized gene expression in spatial transcriptomic data (spots * genes).
+    scRNA_df : dataframe
+        normalized gene expression in scRNA-seq data (cells * genes).
+    scRNA_celltype : dataframe
+        cell-type annotations for cells in scRNA-seq data. Only 1 column named <celltype>.
+    plot_colors : dict
+        color palette for plot.
+
+    Returns
+    -------
+    None.
+    '''
+    
+    assert((scRNA_df.index == scRNA_celltype.index).all())
+    assert((spatial_df.columns == scRNA_df.columns).all())
+    
+    # need to create subfolders first, otherwise got FileNotFoundError
+    os.makedirs(os.path.join(diagnosis_path, 'raw_input_data'), exist_ok=True)
+    
+    celltype_count_dict = scRNA_celltype.celltype.value_counts().to_dict()
+    
+    # take average within cell-types to get cell-type specific marker gene profile
+    scRNA_avg_df = scRNA_df.copy()
+    scRNA_avg_df['celltype'] = scRNA_celltype.celltype
+    scRNA_avg_df = scRNA_avg_df.groupby(['celltype']).mean()
+    
+    # UMAP of raw input spatial and scRNA-seq cell gene expression
+    # we also add marker gene expression profile here
+    # the order will affect the point overlay, first row draw first
+    # umap has embeded seed (default 42), by specify random_state, umap will use special mode to keep reproducibility
+    # note here both gene expressions are sequencing normalized values, without log transform and scaling
+    tmp_df = pd.concat([spatial_df, scRNA_df, scRNA_avg_df], ignore_index=True)
+    
+    all_umap = umap.UMAP(random_state=42).fit_transform(tmp_df.values)
+    
+    # add cell/spot count in the annotation
+    plot_df = pd.DataFrame({'UMAP1': all_umap[:, 0],
+                            'UMAP2': all_umap[:, 1],
+                            'celltype': [f'spatial ({spatial_df.shape[0]})']*spatial_df.shape[0] +
+                                        [f'{x} ({celltype_count_dict[x]})' for x in scRNA_celltype.celltype.to_list()] +
+                                        [f'{x} ({celltype_count_dict[x]})' for x in scRNA_avg_df.index],
+                            'dataset': ['spatial']*spatial_df.shape[0] +
+                                       ['scRNA-seq']*scRNA_df.shape[0] +
+                                       ['scRNA-seq']*scRNA_avg_df.shape[0],
+                            'datatype': ['cell/spot']*spatial_df.shape[0] +
+                                        ['cell/spot']*scRNA_df.shape[0] +
+                                        ['marker']*scRNA_avg_df.shape[0]
+                            },
+                           index = spatial_df.index.to_list() +
+                                   scRNA_df.index.to_list() +
+                                   [f'{x}-marker' for x in scRNA_avg_df.index])
+    
+    plot_sizes = {'cell/spot': 20, 'marker': 200}
+    plot_markers = {'cell/spot': 'o', 'marker': 'X'}
+    # color for plot already defined
+
+    sns.set_style("darkgrid")
+    
+    # relplot return a FacetGrid object
+    # specify figure size by Height (in inches) of each facet, and Aspect ratio of each facet
+    fgrid = sns.relplot(data=plot_df, x='UMAP1', y='UMAP2', hue='celltype', size='datatype', style='datatype', sizes=plot_sizes, markers=plot_markers, palette=plot_colors, kind='scatter', col='dataset', col_order=['scRNA-seq', 'spatial'], height=4.8*2, aspect=6.4/4.8)
+    fgrid.set(xlabel='Embedding Dimension 1', ylabel='Embedding Dimension 2')
+    # Put the legend out of the figure
+    #ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+    
+    # add cell-type annotations around marker coordinates
+    # adjustText do not support seaborn relplot
+    #from adjustText import adjust_text
+    # fgrid.axes return an array of all axes in the figure
+    ax = fgrid.axes[0, 0]
+    texts = []
+    for one_row in scRNA_avg_df.index:
+        texts.append(ax.text(plot_df.at[one_row+'-marker', 'UMAP1'], plot_df.at[one_row+'-marker', 'UMAP2'], one_row, weight='bold'))
+    #adjust_text(texts)
+    
+    plt.savefig(os.path.join(diagnosis_path, 'raw_input_data', 'UMAP_raw_input_color_by_celltype.png'))
+    plt.close()
+    
+    
+    # also save UMAP coordinates
+    plot_df[['UMAP1', 'UMAP2']].to_csv(os.path.join(diagnosis_path, 'raw_input_data', 'UMAP_coordinates_raw_input.csv.gz'), compression='gzip')
+
+
+
+def diagnosisCVAE(cvae, encoder, decoder, spatial_embed, spatial_transformed_df, spatial_transformed_numi, pseudo_spatial_embed, scRNA_celltype, celltype_order, celltype_count_dict, scrna_cell_celltype_prop, scRNA_embed, pseudo_spots_celltype_prop, n_cell_in_spot, pseudo_spot_embed, scRNA_decode_df, scRNA_decode_avg_df, new_markers, plot_colors):
     '''
     save CVAE related Keras models to h5 file, generate figures to diagnosis the training of CVAE
 
@@ -68,6 +242,8 @@ def diagnosisCVAE(cvae, encoder, decoder, spatial_embed, spatial_transformed_df,
         CVAE decodered average gene expression (normalized) of cell-types in scRNA-seq data (cell-types * genes)
     new_markers : list or None
         marker genes from re-run DE on CVAE transformed scRNA-seq data. It will be None if not re-run DE (rerun_DE=False)
+    plot_colors : dict
+        color palette for plot
         
     Returns
     -------
@@ -165,12 +341,8 @@ def diagnosisCVAE(cvae, encoder, decoder, spatial_embed, spatial_transformed_df,
                                    [f'spatial_pseudo{x}' for x in range(pseudo_spatial_embed.shape[0])] +
                                    scRNA_decode_df.index.to_list() +
                                    spatial_transformed_df.index.to_list())
-    plot_colors = {}
-    for one_celltype, one_color in zip([f'spatial ({spatial_embed.shape[0]})']+[f'{x} ({celltype_count_dict[x]})' for x in celltype_order], distinctipy.get_colors(len(celltype_order)+1)):
-        plot_colors[one_celltype] = one_color
-    # assign pseudo spots as gray80
-    plot_colors['pseudo'] = '#cccccc'
     
+    # plot colors already defined
     sns.set_style("darkgrid")
     
     # relplot return a FacetGrid object

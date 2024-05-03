@@ -1,6 +1,8 @@
 Installation
 ============
 
+SDePER currently supports only Linux operating systems such as Ubuntu, and is compatible with Python versions 3.9.12 up to but not including 3.11.
+
 SDePER can be installed using conda, pip or Docker/Singularity.
 
 

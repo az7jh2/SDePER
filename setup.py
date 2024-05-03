@@ -44,7 +44,7 @@ setuptools.setup(
     description = "Spatial Deconvolution method with Platform Effect Removal",
     long_description = long_description,
     long_description_content_type = "text/markdown",
-    python_requires = ">=3.9.12",    # Minimum Python version
+    python_requires = ">=3.9.12, <3.11",    # Specifies Python version support
     install_requires = requirements,    # Dependencies
     license_files = "LICENSE",    # license file will be include in top-level automatically (failed, specify it in MANIFEST.in)
     package_dir = {"": "src"},    # py files are in src folder

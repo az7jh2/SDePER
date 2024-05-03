@@ -436,7 +436,7 @@ def CVAE_keras_model(p, p_cond, latent_dim, p_encoder_lst, p_decoder_lst, hidden
 
 
 
-def build_CVAE(spatial_df, scRNA_df, scRNA_celltype, n_marker_per_cmp, n_pseudo_spot, pseudo_spot_min_cell, pseudo_spot_max_cell, seq_depth_scaler, cvae_input_scaler, cvae_init_lr, num_hidden_layer, use_fdr, p_val_cutoff, fc_cutoff, pct1_cutoff, pct2_cutoff, sortby_fc, diagnosis, rerun_DE=True, filter_gene=True):
+def build_CVAE(spatial_df, scRNA_df, scRNA_celltype, n_marker_per_cmp, n_pseudo_spot, pseudo_spot_min_cell, pseudo_spot_max_cell, seq_depth_scaler, cvae_input_scaler, cvae_init_lr, num_hidden_layer, use_batch_norm, cvae_train_epoch, use_spatial_pseudo, use_fdr, p_val_cutoff, fc_cutoff, pct1_cutoff, pct2_cutoff, sortby_fc, diagnosis, rerun_DE=True, filter_gene=True):
     '''
     build CVAE to adjust platform effect, return transformed spatial gene expression and scRNA-seq cell-type gene signature
     
@@ -466,6 +466,12 @@ def build_CVAE(spatial_df, scRNA_df, scRNA_celltype, n_marker_per_cmp, n_pseudo_
         initial learning rate for training CVAE.
     num_hidden_layer : int
         number of hidden layers in encoder and decoder.
+    use_batch_norm : bool
+        whether to use Batch Normalization.
+    cvae_train_epoch : int
+        max number of training epochs for the CVAE.
+    use_spatial_pseudo : int
+        whether to generate "pseudo-spots" in spatial condition.
     use_fdr : bool
         whether to use FDR adjusted p value for filtering and sorting.
     p_val_cutoff : float
@@ -498,6 +504,14 @@ def build_CVAE(spatial_df, scRNA_df, scRNA_celltype, n_marker_per_cmp, n_pseudo_
     
     assert((scRNA_df.index == scRNA_celltype.index).all())
     assert((spatial_df.columns == scRNA_df.columns).all())
+    
+    
+    if diagnosis:
+        # first plot UMAP for raw input gene expressions
+        from diagnosis_plots import defineColor, rawInputUMAP
+        plot_colors = defineColor(spatial_df.shape[0], scRNA_celltype)
+        rawInputUMAP(spatial_df, scRNA_df, scRNA_celltype, plot_colors)
+        
     
     # some settings
     # max number of pseudo spots (training+validation, without training single cells)
@@ -533,7 +547,10 @@ def build_CVAE(spatial_df, scRNA_df, scRNA_celltype, n_marker_per_cmp, n_pseudo_
     
     
     # generate pseudo-spots by combining spatial spots
-    n_spot_spatial = int(0.5 * n_spot_scrna)
+    if use_spatial_pseudo:
+        n_spot_spatial = int(0.5 * n_spot_scrna)
+    else:
+        n_spot_spatial = 0
     n_train_spot_spatial = int(np.floor(n_spot_spatial * training_pct))
     n_valid_spot_spatial = int(n_spot_spatial - n_train_spot_spatial)
     print(f'generate {n_spot_spatial} pseudo-spots containing 2 to 6 spots from spatial spots...')
@@ -629,7 +646,7 @@ def build_CVAE(spatial_df, scRNA_df, scRNA_celltype, n_marker_per_cmp, n_pseudo_
     print(f'Decoder: {" - ".join([str(x) for x in ([latent_dim+p_cond] + hidden_dim + [p])])}\n')
     
     # note hidden layer in encoder is a reverse of the hidden_dim variable
-    cvae, new_decoder = CVAE_keras_model(p, p_cond, latent_dim, hidden_dim[::-1], hidden_dim, use_batch_norm=True, cvae_init_lr=cvae_init_lr)
+    cvae, new_decoder = CVAE_keras_model(p, p_cond, latent_dim, hidden_dim[::-1], hidden_dim, use_batch_norm=use_batch_norm, cvae_init_lr=cvae_init_lr)
     
     # learning rate decay
     lrate = ReduceLROnPlateau(monitor='val_loss', factor=0.9, patience=10, min_lr=5e-4, cooldown=5, verbose=False)
@@ -642,14 +659,22 @@ def build_CVAE(spatial_df, scRNA_df, scRNA_celltype, n_marker_per_cmp, n_pseudo_
     # still has unknown randomness source even set seed here...
     set_random_seed(1154)
     
+    # if not use Batch Normalization, we use all training data for one epoch
+    if use_batch_norm:
+        one_batch_size = 16384
+        do_shuffle = True
+    else:
+        one_batch_size = data.shape[0]
+        do_shuffle = False
+    
     # Train CVAE
     # note when there is no pseudo-spots, then there is no validation data
     if valid_data.shape[0] == 0:
         print('\nStart training without validation data...\n')
         history_callback = cvae.fit([data, labels], data,
-                                epochs=500,
-                                batch_size=16384,
-                                shuffle=True,
+                                epochs=cvae_train_epoch,
+                                batch_size=one_batch_size,
+                                shuffle=do_shuffle,
                                 callbacks=[lrate, early_stop],
                                 sample_weight=sample_weight,
                                 verbose=True)
@@ -657,21 +682,26 @@ def build_CVAE(spatial_df, scRNA_df, scRNA_celltype, n_marker_per_cmp, n_pseudo_
          print('\nStart training...\n')
          history_callback = cvae.fit([data, labels], data,
                                 validation_data=([valid_data, valid_labels], valid_data),
-                                epochs=500,
-                                batch_size=16384,
-                                shuffle=True,
+                                epochs=cvae_train_epoch,
+                                batch_size=one_batch_size,
+                                shuffle=do_shuffle,
                                 callbacks=[lrate, early_stop],
                                 sample_weight=sample_weight,
                                 verbose=True)
     
     n_epoch = len(history_callback.history['loss'])
     
-    if n_epoch < 500:
+    if n_epoch < cvae_train_epoch:
         print(f'\ntraining finished in {n_epoch} epochs (early stop), transform data to adjust the platform effect...\n')
     else:
         print(f'\ntraining finished in {n_epoch} epochs (reach max pre-specified epoches), transform data to adjust the platform effect...\n')
 
-    
+    if diagnosis:
+        # plot loss
+        from diagnosis_plots import plotCVAELoss
+        plotCVAELoss(history_callback)
+
+
     # postprocess the trained models
     # Subset the encoder
     encoder = Model([cvae.get_layer('encoder_input').input, cvae.get_layer('cond_input').input],
@@ -760,7 +790,7 @@ def build_CVAE(spatial_df, scRNA_df, scRNA_celltype, n_marker_per_cmp, n_pseudo_
                       spatial_embed, spatial_transformed_df, spatial_transformed_numi, pseudo_spatial_embed,
                       scRNA_celltype, celltype_order, celltype_count_dict, scrna_cell_celltype_prop, scRNA_embed,
                       pseudo_spots_celltype_prop, n_cell_in_spot, pseudo_spot_embed,
-                      scRNA_decode_df, scRNA_decode_avg_df, new_markers)
+                      scRNA_decode_df, scRNA_decode_avg_df, new_markers, plot_colors)
 
 
     #print(f'before CVAE building function return RAM usage: {psutil.Process().memory_info().rss/1024**2:.2f} MB')
@@ -769,7 +799,7 @@ def build_CVAE(spatial_df, scRNA_df, scRNA_celltype, n_marker_per_cmp, n_pseudo_
 
 
 
-def build_CVAE_whole(spatial_file, ref_file, ref_anno_file, marker_file, n_hv_gene, n_marker_per_cmp, n_pseudo_spot, pseudo_spot_min_cell, pseudo_spot_max_cell, seq_depth_scaler, cvae_input_scaler, cvae_init_lr, num_hidden_layer, redo_de, use_fdr, p_val_cutoff, fc_cutoff, pct1_cutoff, pct2_cutoff, sortby_fc, diagnosis, filter_cell, filter_gene):
+def build_CVAE_whole(spatial_file, ref_file, ref_anno_file, marker_file, n_hv_gene, n_marker_per_cmp, n_pseudo_spot, pseudo_spot_min_cell, pseudo_spot_max_cell, seq_depth_scaler, cvae_input_scaler, cvae_init_lr, num_hidden_layer, use_batch_norm, cvae_train_epoch, use_spatial_pseudo, redo_de, use_fdr, p_val_cutoff, fc_cutoff, pct1_cutoff, pct2_cutoff, sortby_fc, diagnosis, filter_cell, filter_gene):
     '''
     read related CSV files, build CVAE to adjust platform effect, return transformed spatial gene expression and scRNA-seq cell-type gene signature
 
@@ -801,6 +831,12 @@ def build_CVAE_whole(spatial_file, ref_file, ref_anno_file, marker_file, n_hv_ge
         initial learning rate for training CVAE.
     num_hidden_layer : int
         number of hidden layers in encoder and decoder.
+    use_batch_norm : bool
+        whether to use Batch Normalization.
+    cvae_train_epoch : int
+        max number of training epochs for the CVAE.
+    use_spatial_pseudo : int
+        whether to generate "pseudo-spots" in spatial condition.
     redo_de : bool
         whether to redo DE after CVAE transformation.
     use_fdr : bool
@@ -906,7 +942,7 @@ def build_CVAE_whole(spatial_file, ref_file, ref_anno_file, marker_file, n_hv_ge
                                sc.get.obs_df(scrna_obj, keys=final_gene_list),
                                scrna_celltype,
                                n_marker_per_cmp, n_pseudo_spot, pseudo_spot_min_cell, pseudo_spot_max_cell, seq_depth_scaler,
-                               cvae_input_scaler, cvae_init_lr, num_hidden_layer,
+                               cvae_input_scaler, cvae_init_lr, num_hidden_layer, use_batch_norm, cvae_train_epoch, use_spatial_pseudo,
                                use_fdr, p_val_cutoff, fc_cutoff, pct1_cutoff, pct2_cutoff, sortby_fc,
                                diagnosis, rerun_DE=redo_de, filter_gene=filter_gene)
     
