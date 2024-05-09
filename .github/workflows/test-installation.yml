@@ -95,7 +95,7 @@ jobs:
           
       - name: Test version
         run: |
-          PACKAGE_VERSION=$(runDeconvolution -v | tail -n 1 | grep -o 'v[0-9]\+\.[0-9]\+\.[0-9]\+')
+          PACKAGE_VERSION=$(runDeconvolution -v | tail -n 1 | grep -o '[0-9]\+\.[0-9]\+\.[0-9]\+')
           if [ "$PACKAGE_VERSION" == "${{ env.VERSION_NUMBER }}" ]; then
             echo "Version matches: $PACKAGE_VERSION"
           else
@@ -220,7 +220,7 @@ jobs:
           
       - name: Test version
         run: |
-          PACKAGE_VERSION=$(runDeconvolution -v | tail -n 1 | grep -o 'v[0-9]\+\.[0-9]\+\.[0-9]\+')
+          PACKAGE_VERSION=$(runDeconvolution -v | tail -n 1 | grep -o '[0-9]\+\.[0-9]\+\.[0-9]\+')
           if [ "$PACKAGE_VERSION" == "${{ env.VERSION_NUMBER }}" ]; then
             echo "Version matches: $PACKAGE_VERSION"
           else
@@ -339,7 +339,7 @@ jobs:
       
       - name: Test version
         run: |
-          PACKAGE_VERSION=$(docker run --rm az7jh2/sdeper:${{ env.VERSION_NUMBER }} runDeconvolution -v | tail -n 1 | grep -o 'v[0-9]\+\.[0-9]\+\.[0-9]\+')
+          PACKAGE_VERSION=$(docker run --rm az7jh2/sdeper:${{ env.VERSION_NUMBER }} runDeconvolution -v | tail -n 1 | grep -o '[0-9]\+\.[0-9]\+\.[0-9]\+')
           if [ "$PACKAGE_VERSION" == "${{ env.VERSION_NUMBER }}" ]; then
             echo "Version matches: $PACKAGE_VERSION"
           else

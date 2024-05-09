@@ -226,7 +226,7 @@ def diagnosisCVAE(cvae, encoder, decoder, spatial_embed, spatial_transformed_df,
         already sorted unique cell-types. Its order matters, and will be the order in pseudo_spots_celltype (columns) and cell-type gene expression profile (rows)
     celltype_count_dict : dict
         number of cells in reference scRNA-seq data for each cell-type
-    scrna_cell_celltype_prop : dict
+    scrna_cell_celltype_prop : dataframe
         scRNA-seq cells cell-type proportions (cells * cell-types)
     scRNA_embed : 2-D numpy array
         mu in latent space of scRNA-seq cells (cells * latent neurons)
@@ -271,9 +271,18 @@ def diagnosisCVAE(cvae, encoder, decoder, spatial_embed, spatial_transformed_df,
     
     
     # save transformed data, which are used in GLRM modeling
-    spatial_transformed_numi.to_csv(os.path.join(diagnosis_path, 'CVAE_transformed_data', 'spatial_spots_transformToscRNA_decoded.csv.gz'), compression='gzip')
-    scRNA_decode_avg_df.to_csv(os.path.join(diagnosis_path, 'CVAE_transformed_data', 'scRNA_decoded_avg_exp_bycelltypes.csv.gz'), compression='gzip')
+    if new_markers is None:
+        spatial_transformed_numi.to_csv(os.path.join(diagnosis_path, 'CVAE_transformed_data', 'spatial_spots_transformToscRNA_decoded.csv.gz'), compression='gzip')
+    else:
+        # save only marker genes used in downstream anlaysis
+        spatial_transformed_numi[new_markers].to_csv(os.path.join(diagnosis_path, 'CVAE_transformed_data', 'spatial_spots_transformToscRNA_decoded.csv.gz'), compression='gzip')
     
+    if new_markers is None:
+        scRNA_decode_avg_df.to_csv(os.path.join(diagnosis_path, 'CVAE_transformed_data', 'scRNA_decoded_avg_exp_bycelltypes.csv.gz'), compression='gzip')
+    else:
+        # save only marker genes used in downstream anlaysis
+        scRNA_decode_avg_df[new_markers].to_csv(os.path.join(diagnosis_path, 'CVAE_transformed_data', 'scRNA_decoded_avg_exp_bycelltypes.csv.gz'), compression='gzip')
+        
     
     # plot variance of mu of spatial spots and scRNA-seq cells
     latent_var = np.concatenate((spatial_embed, scRNA_embed), axis=0).var(axis=0)

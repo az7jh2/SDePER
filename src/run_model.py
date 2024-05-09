@@ -34,7 +34,8 @@ def run_GLRM(data, lambda_r=None, weight_threshold=1e-3, lambda_g=None, estimate
             non_zero_mtx: If it's None, then do not filter zeros during regression. If it's a bool 2-D numpy matrix (spots * genes) as False means genes whose nUMI=0 while True means genes whose nUMI>0 in corresponding spots. The bool indicators can be calculated based on either observerd raw nUMI counts in spatial data, or CVAE transformed nUMI counts.\n
             spot_names: a list of string of spot barcodes. Only keep spots passed filtering.\n
             gene_names: a list of string of gene symbols. Only keep actually used marker genes.\n
-            celltype_names: a list of string of celltype names.
+            celltype_names: a list of string of celltype names.\n
+            initial_guess: initial guess of cell-type proportions of spatial spots.
     lambda_r : float, optional
         strength for Adaptive Lasso penalty. The default is None, i.e. use cross-validation to determine optimal value
     weight_threshold : float, optional
@@ -105,7 +106,7 @@ def run_GLRM(data, lambda_r=None, weight_threshold=1e-3, lambda_g=None, estimate
     
     use_cache = False
     if use_cache:
-        print('use dict to cache likelihoods in regression')
+        print('HIGHLIGHT: use dict to cache likelihoods in regression for quick calculation')
     
     # define graph from adjacency matrix
     if data['A'] is None:

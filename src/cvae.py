@@ -10,12 +10,15 @@ this script stores functions to build a CVAE for platform effect adjustment
 
 
 
-from config import print
+import os
+from config import print, diagnosis_path
 import numpy as np
 import pandas as pd
 from utils import read_spatial_data, read_scRNA_data, run_DE
 from time import time
 import random
+from sklearn.decomposition import PCA
+from sklearn.neighbors import NearestNeighbors
 from sklearn.preprocessing import MinMaxScaler
 import scanpy as sc
 sc.settings.verbosity = 0  # verbosity: errors (0), warnings (1), info (2), hints (3)
@@ -61,6 +64,61 @@ def celltype2props(celltype_anno, celltype_order):
     celltype_prop = celltype_prop.div(celltype_prop.sum(axis=1), axis=0)
     
     return celltype_prop
+
+
+
+def transferProps(query, ref, ref_props, n_neighbors=10, sigma=1.0):
+    '''
+    transfer cell-type proportions by select K Nearest Neighbors in ref and take Gaussian weighted average of ref proportions
+
+    Parameters
+    ----------
+    query : 2-D numpy matrix
+        encoder embeddings of spatial spots (spots * latent layer neurons).
+    ref : 2-D numpy matrix
+        encoder embeddings of scRNA-seq cells and pseudo-spots in scRNA-seq condition (cells+pseudo-spots * latent layer neurons).
+    ref_props : 2-D numpy matrix
+        cell-type proportion matrix of scRNA-seq cells and pseudo-spots (cells+pseudo-spots * cell-types).
+    n_neighbors : int, optional
+        Number of neighbors to use. The default is 10.
+    sigma : float, optional
+        Standard deviation for the Gaussian weighting function. The default is 1.0.
+
+    Returns
+    -------
+    query_props : 2-D numpy matrix
+        cell-type proportion matrix for spatial spots.
+    '''
+    
+    # first take a PCA to avoid Curse of Dimensionality
+    # we perform PCA without any normalization and scaling, and reduce the dimensionality to one-third of the original dimensions
+    # orginal dimension: 3*#cell-types, reduced dimension: #cell-types
+    principal_components = PCA(n_components=int(query.shape[1]/3)).fit_transform(np.vstack((query, ref)))
+    # Split the principal components back into query and ref
+    query_pc = principal_components[:query.shape[0], :]
+    ref_pc = principal_components[query.shape[0]:, :]
+    
+    # perform KNN on query data on reduced dimension
+    nbrs = NearestNeighbors(n_neighbors=n_neighbors, algorithm='auto').fit(ref_pc)
+    # find nearest neighbors
+    distances, indices = nbrs.kneighbors(query_pc)
+    # Calculate Gaussian weighted averages
+    query_props = np.zeros((query.shape[0], ref_props.shape[1]))
+
+    for i, (dists, inds) in enumerate(zip(distances, indices)):
+        # Compute Gaussian weights
+        weights = np.exp(-dists**2 / (2 * sigma**2))
+        weights /= weights.sum()
+        # Multiply weights with corresponding rows in ref_props (element-wise multiplication)
+        # first inserts a new axis along the second dimension (column) of weights, changing the shape of weights from (K,) to (K, 1).
+        # then perform multiplication with shape (K, m) * (K, 1), numpy broadcasting expands weights along the column dimension (1 dimension), matching the column size of ref_props, and perform element-wise multiplication
+        weighted_props = ref_props[inds] * weights[:, np.newaxis]
+        # calculate weighted average for the current query row; axis=0 sum across columns
+        avg_props = np.sum(weighted_props, axis=0)
+        # normalize the proportions to sum to 1
+        query_props[i] = avg_props / np.sum(avg_props)
+        
+    return query_props
 
 
 
@@ -500,6 +558,8 @@ def build_CVAE(spatial_df, scRNA_df, scRNA_celltype, n_marker_per_cmp, n_pseudo_
         CVAE decodered average gene expression (normalized) of cell-types in scRNA-seq data (cell-types * genes).
     new_markers : list or None
         marker genes from re-run DE on CVAE transformed scRNA-seq data. It will be None if not re-run DE (rerun_DE=False).
+    cvae_pred : dataframe or None
+        cell-type proportions of spatial spots predicted or transferred by CVAE. It will be None if no way to got initial guess of cell-type proportions (spots * cell-types).
     '''
     
     assert((scRNA_df.index == scRNA_celltype.index).all())
@@ -524,6 +584,8 @@ def build_CVAE(spatial_df, scRNA_df, scRNA_celltype, n_marker_per_cmp, n_pseudo_
     input_max = cvae_input_scaler
     # first log transform, then minmax scaling
     use_log_transform = True
+    # whether to get initial guess of cell-type proportions
+    do_initial_guess = True
     
     # the order of celltypes matters, unify the order throughout whole pipeline, which will be determined here
     celltype_order = sorted(list(scRNA_celltype.celltype.unique()))
@@ -533,14 +595,14 @@ def build_CVAE(spatial_df, scRNA_df, scRNA_celltype, n_marker_per_cmp, n_pseudo_
     
     # Randomly select cells into pseudo-spots, at most X pseudo-spots
     # total number of generated pseudo-spots (including training and validation pseudo-spots, NOT include scRNA-seq cells)
-    n_spot_scrna = int(min(100 * spatial_df.shape[0] * n_celltype, n_max_pseudo_spots))
-    n_train_spot_scrna = int(np.floor(n_spot_scrna * training_pct))
-    n_valid_spot_scrna = int(n_spot_scrna - n_train_spot_scrna)
-    print(f'generate {n_spot_scrna} pseudo-spots containing {pseudo_spot_min_cell} to {pseudo_spot_max_cell} cells from scRNA-seq cells...')
+    n_pseudo_scrna = int(min(100 * spatial_df.shape[0] * n_celltype, n_max_pseudo_spots))
+    n_train_pseudo_scrna = int(np.floor(n_pseudo_scrna * training_pct))
+    n_valid_pseudo_scrna = int(n_pseudo_scrna - n_train_pseudo_scrna)
+    print(f'generate {n_pseudo_scrna} pseudo-spots containing {pseudo_spot_min_cell} to {pseudo_spot_max_cell} cells from scRNA-seq cells...')
     # pseudo-spot gene expression (pseudo-spots * genes; NO scRNA-seq cells at the end)
     # pseudo-spot cell-type proportions (pseudo-spots * cell-types; NO scRNA-seq cells at the end)
     # number of cells in pseudo-spots (NO scRNA-seq cells at the end)
-    pseudo_spots_df, pseudo_spots_celltype_prop, n_cell_in_spot = generate_pseudo_spots(scRNA_df, scRNA_celltype, n_spot_scrna, celltype_order, pseudo_spot_min_cell, pseudo_spot_max_cell)
+    pseudo_spots_df, pseudo_spots_celltype_prop, n_cell_in_spot = generate_pseudo_spots(scRNA_df, scRNA_celltype, n_pseudo_scrna, celltype_order, pseudo_spot_min_cell, pseudo_spot_max_cell)
     
     # convert scRNA-seq cell-type annotation to proportions
     scrna_cell_celltype_prop = celltype2props(scRNA_celltype, celltype_order)
@@ -548,13 +610,13 @@ def build_CVAE(spatial_df, scRNA_df, scRNA_celltype, n_marker_per_cmp, n_pseudo_
     
     # generate pseudo-spots by combining spatial spots
     if use_spatial_pseudo:
-        n_spot_spatial = int(0.5 * n_spot_scrna)
+        n_pseudo_spatial = int(0.5 * n_pseudo_scrna)
     else:
-        n_spot_spatial = 0
-    n_train_spot_spatial = int(np.floor(n_spot_spatial * training_pct))
-    n_valid_spot_spatial = int(n_spot_spatial - n_train_spot_spatial)
-    print(f'generate {n_spot_spatial} pseudo-spots containing 2 to 6 spots from spatial spots...')
-    pseudo_spatial_df = combine_spatial_spots(spatial_df, n_spot_spatial, 2, 6)
+        n_pseudo_spatial = 0
+    n_train_pseudo_spatial = int(np.floor(n_pseudo_spatial * training_pct))
+    n_valid_pseudo_spatial = int(n_pseudo_spatial - n_train_pseudo_spatial)
+    print(f'generate {n_pseudo_spatial} pseudo-spots containing 2 to 6 spots from spatial spots...')
+    pseudo_spatial_df = combine_spatial_spots(spatial_df, n_pseudo_spatial, 2, 6)
     
     
     if use_log_transform:
@@ -573,20 +635,20 @@ def build_CVAE(spatial_df, scRNA_df, scRNA_celltype, n_marker_per_cmp, n_pseudo_
     # first spots used for validation, rest spots used for training
     print(f'\n{"" : <24} | {"training": >9} | {"validation": >9}')
     print(f'{"spatial spots" : <24} | {spatial_df.shape[0]: >9} | {0: >9}')
-    print(f'{"spatial pseudo-spots" : <24} | {n_train_spot_spatial: >9} | {n_valid_spot_spatial: >9}')
+    print(f'{"spatial pseudo-spots" : <24} | {n_train_pseudo_spatial: >9} | {n_valid_pseudo_spatial: >9}')
     print(f'{"scRNA-seq cells" : <24} | {scRNA_df.shape[0]: >9} | {0: >9}')
-    print(f'{"scRNA-seq pseudo-spots" : <24} | {n_train_spot_scrna: >9} | {n_valid_spot_scrna: >9}\n')
+    print(f'{"scRNA-seq pseudo-spots" : <24} | {n_train_pseudo_scrna: >9} | {n_valid_pseudo_scrna: >9}\n')
     
-    train_scrna_df = pd.concat([pseudo_spots_df.iloc[n_valid_spot_scrna:,:], scRNA_df], ignore_index=False)
-    valid_scrna_df = pseudo_spots_df.iloc[:n_valid_spot_scrna,:]
+    train_scrna_df = pd.concat([pseudo_spots_df.iloc[n_valid_pseudo_scrna:,:], scRNA_df], ignore_index=False)
+    valid_scrna_df = pseudo_spots_df.iloc[:n_valid_pseudo_scrna,:]
     
-    train_spatial_df = pd.concat([pseudo_spatial_df.iloc[n_valid_spot_spatial:,:], spatial_df], ignore_index=False)
-    valid_spatial_df = pseudo_spatial_df.iloc[:n_valid_spot_spatial,:]
+    train_spatial_df = pd.concat([pseudo_spatial_df.iloc[n_valid_pseudo_spatial:,:], spatial_df], ignore_index=False)
+    valid_spatial_df = pseudo_spatial_df.iloc[:n_valid_pseudo_spatial,:]
     
-    assert train_scrna_df.shape[0] == (n_train_spot_scrna + scRNA_df.shape[0])
-    assert valid_scrna_df.shape[0] == n_valid_spot_scrna
-    assert train_spatial_df.shape[0] == (n_train_spot_spatial + spatial_df.shape[0])
-    assert valid_spatial_df.shape[0] == n_valid_spot_spatial
+    assert train_scrna_df.shape[0] == (n_train_pseudo_scrna + scRNA_df.shape[0])
+    assert valid_scrna_df.shape[0] == n_valid_pseudo_scrna
+    assert train_spatial_df.shape[0] == (n_train_pseudo_spatial + spatial_df.shape[0])
+    assert valid_spatial_df.shape[0] == n_valid_pseudo_spatial
     
     # scaling to [0,input_max] with each dataset separately
     # use only spatial spots + spatial pseudo-spots for spatial dataset scaling
@@ -609,9 +671,9 @@ def build_CVAE(spatial_df, scRNA_df, scRNA_celltype, n_marker_per_cmp, n_pseudo_
     
     # first spatial pseudo-spots then spatial spots then scRNA-seq pseudo-spots and scRNA-seq cells in data
     # we also consider whether to duplicate spatial data since they are few
-    oversample_scale = 1
-    data = np.vstack((np.tile(train_spatial_data, (oversample_scale, 1)), train_scrna_data))
-    labels = np.array([input_max]*train_spatial_data.shape[0]*oversample_scale + [0.]*train_scrna_data.shape[0])
+    # update: use training sample weights
+    data = np.vstack((train_spatial_data, train_scrna_data))
+    labels = np.array([input_max]*train_spatial_data.shape[0] + [0.]*train_scrna_data.shape[0])
     labels = labels.reshape((len(labels), 1))
     
     # validation data
@@ -620,12 +682,43 @@ def build_CVAE(spatial_df, scRNA_df, scRNA_celltype, n_marker_per_cmp, n_pseudo_
     valid_labels = valid_labels.reshape((len(valid_labels), 1))
     
     
-    # re-weight spatial data to make sure the sample size equals spatial:scRNA = 1:10
-    sample_weight = np.ones((data.shape[0],))
-
-    if train_spatial_df.shape[0] < 0.1 * train_scrna_data.shape[0]:
-        # spatial data are located in first part
-        sample_weight[:train_spatial_df.shape[0]] *= 0.1 * train_scrna_data.shape[0] / train_spatial_df.shape[0]
+    # training sample weights
+    weight_pseudo_scrna = np.ones((n_train_pseudo_scrna,))
+    weight_cell_scrna = np.ones((scRNA_df.shape[0],))
+    weight_pseudo_spatial = np.ones((n_train_pseudo_spatial,))
+    weight_spot_spatial = np.ones((spatial_df.shape[0],))
+    
+    # weight sum of scRNA-seq cells : sum of scRNA pseudo spots = 1 : 1
+    # always decrease the weights for cohort with more samples
+    if n_train_pseudo_scrna > 0:
+        if n_train_pseudo_scrna > scRNA_df.shape[0]:
+            weight_pseudo_scrna *= scRNA_df.shape[0] / n_train_pseudo_scrna
+        elif n_train_pseudo_scrna < scRNA_df.shape[0]:
+            weight_cell_scrna *= n_train_pseudo_scrna / scRNA_df.shape[0]
+            
+    # weight sum of spatial spots : sum of spatial pseudo spots = 1 : 1
+    # always decrease the weights for cohort with more samples
+    if n_train_pseudo_spatial > 0:
+        if n_train_pseudo_spatial > spatial_df.shape[0]:
+            weight_pseudo_spatial *= spatial_df.shape[0] / n_train_pseudo_spatial
+        elif n_train_pseudo_spatial < spatial_df.shape[0]:
+            weight_spot_spatial *= n_train_pseudo_spatial / spatial_df.shape[0]
+    
+    # Final Balancing, re-weight spatial data to make sure the sum of spatial : sum of scRNA-seq = 1 : 1
+    # since we have already adjusted the weights, here we can not rely on sample size any more, use the sum of weight instead
+    # always decrease the weights for cohort with more samples
+    if (np.sum(weight_pseudo_scrna)+np.sum(weight_cell_scrna)) < (np.sum(weight_pseudo_spatial)+np.sum(weight_spot_spatial)):
+        # calculate factor beforehand to avoid update in weight causing factor change
+        tmp_factor = (np.sum(weight_pseudo_scrna)+np.sum(weight_cell_scrna)) / (np.sum(weight_pseudo_spatial)+np.sum(weight_spot_spatial))
+        weight_pseudo_spatial *= tmp_factor
+        weight_spot_spatial *= tmp_factor
+    elif (np.sum(weight_pseudo_scrna)+np.sum(weight_cell_scrna)) > (np.sum(weight_pseudo_spatial)+np.sum(weight_spot_spatial)):
+        tmp_factor = (np.sum(weight_pseudo_spatial)+np.sum(weight_spot_spatial)) / (np.sum(weight_pseudo_scrna)+np.sum(weight_cell_scrna))
+        weight_pseudo_scrna *= tmp_factor
+        weight_cell_scrna *= tmp_factor
+    
+    sample_weight = np.concatenate([weight_pseudo_spatial, weight_spot_spatial,
+                                    weight_pseudo_scrna, weight_cell_scrna])
     
     del train_spatial_data, valid_spatial_data, train_scrna_data, valid_scrna_data
     del train_spatial_df, valid_spatial_df, train_scrna_df, valid_scrna_df
@@ -770,19 +863,34 @@ def build_CVAE(spatial_df, scRNA_df, scRNA_celltype, n_marker_per_cmp, n_pseudo_
     scRNA_decode_avg_df = scRNA_decode_avg_df.loc[celltype_order, :]
     
     
+    # transfer cell-type proportions as an initial guess
+    if n_pseudo_scrna == 0:
+        pseudo_spot_embed = np.empty((0, scRNA_embed.shape[1]))
+    else:
+        pseudo_spot_embed = encoder.predict([scRNA_min_max_scaler.transform(pseudo_spots_df), np.full((pseudo_spots_df.shape[0],1), 0)])[0]
+    
+    if do_initial_guess:
+        tmp_pred = transferProps(spatial_embed,
+                                 np.vstack((scRNA_embed, pseudo_spot_embed)),
+                                 pd.concat([scrna_cell_celltype_prop, pseudo_spots_celltype_prop]).values,
+                                 n_neighbors=10, sigma=1.0)
+        cvae_pred = pd.DataFrame(tmp_pred, index=spatial_df.index, columns=celltype_order)
+        
+        if diagnosis:
+            os.makedirs(os.path.join(diagnosis_path, 'initial_guess'), exist_ok=True)
+            cvae_pred.to_csv(os.path.join(diagnosis_path, 'initial_guess', 'celltype_props_by_transferring.csv'))
+            
+    else:
+        cvae_pred = None
+
+
     # whether to save models and transformed data
     if diagnosis:
-        
         # also embed pseudo-spots for diagnosis
-        if n_spot_spatial == 0:
+        if n_pseudo_spatial == 0:
             pseudo_spatial_embed = np.empty((0, spatial_embed.shape[1]))
         else:
             pseudo_spatial_embed = encoder.predict([spatial_min_max_scaler.transform(pseudo_spatial_df), np.full((pseudo_spatial_df.shape[0],1), input_max)])[0]
-        
-        if n_spot_scrna == 0:
-            pseudo_spot_embed = np.empty((0, scRNA_embed.shape[1]))
-        else:
-            pseudo_spot_embed = encoder.predict([scRNA_min_max_scaler.transform(pseudo_spots_df), np.full((pseudo_spots_df.shape[0],1), 0)])[0]
         
         
         from diagnosis_plots import diagnosisCVAE
@@ -795,7 +903,7 @@ def build_CVAE(spatial_df, scRNA_df, scRNA_celltype, n_marker_per_cmp, n_pseudo_
 
     #print(f'before CVAE building function return RAM usage: {psutil.Process().memory_info().rss/1024**2:.2f} MB')
     
-    return spatial_transformed_numi, scRNA_decode_avg_df, new_markers
+    return spatial_transformed_numi, scRNA_decode_avg_df, new_markers, cvae_pred
 
 
 
@@ -866,12 +974,14 @@ def build_CVAE_whole(spatial_file, ref_file, ref_anno_file, marker_file, n_hv_ge
         CVAE decodered average gene expression (normalized) of cell-types in scRNA-seq data (cell-types * genes).
     new_markers : list or None
         marker genes from re-run DE on CVAE transformed scRNA-seq data. It will be None if not re-run DE.
+    cvae_pred : dataframe or None
+        cell-type proportions of spatial spots predicted or transferred by CVAE. It will be None if no way to got initial guess of cell-type proportions (spots * cell-types).
     '''
     
     start_time = time()
     
     # read spatial data
-    spatial_spot_obj = read_spatial_data(spatial_file, filter_gene)
+    spatial_spot_obj = read_spatial_data(spatial_file, filter_gene)[0]
     
     # read scRNA-seq data
     scrna_obj = read_scRNA_data(ref_file, ref_anno_file, filter_cell, filter_gene)
@@ -938,14 +1048,15 @@ def build_CVAE_whole(spatial_file, ref_file, ref_anno_file, marker_file, n_hv_ge
     # build CVAE
     (spatial_transformed_numi,
      scRNA_decode_avg_df,
-     new_markers) = build_CVAE(sc.get.obs_df(spatial_spot_obj, keys=final_gene_list),
-                               sc.get.obs_df(scrna_obj, keys=final_gene_list),
-                               scrna_celltype,
-                               n_marker_per_cmp, n_pseudo_spot, pseudo_spot_min_cell, pseudo_spot_max_cell, seq_depth_scaler,
-                               cvae_input_scaler, cvae_init_lr, num_hidden_layer, use_batch_norm, cvae_train_epoch, use_spatial_pseudo,
-                               use_fdr, p_val_cutoff, fc_cutoff, pct1_cutoff, pct2_cutoff, sortby_fc,
-                               diagnosis, rerun_DE=redo_de, filter_gene=filter_gene)
+     new_markers,
+     cvae_pred) = build_CVAE(sc.get.obs_df(spatial_spot_obj, keys=final_gene_list),
+                             sc.get.obs_df(scrna_obj, keys=final_gene_list),
+                             scrna_celltype,
+                             n_marker_per_cmp, n_pseudo_spot, pseudo_spot_min_cell, pseudo_spot_max_cell, seq_depth_scaler,
+                             cvae_input_scaler, cvae_init_lr, num_hidden_layer, use_batch_norm, cvae_train_epoch, use_spatial_pseudo,
+                             use_fdr, p_val_cutoff, fc_cutoff, pct1_cutoff, pct2_cutoff, sortby_fc,
+                             diagnosis, rerun_DE=redo_de, filter_gene=filter_gene)
     
     print(f'\nplatform effect adjustment by CVAE finished. Elapsed time: {(time()-start_time)/60.0:.2f} minutes.\n\n')
     
-    return spatial_transformed_numi, scRNA_decode_avg_df, new_markers
+    return spatial_transformed_numi, scRNA_decode_avg_df, new_markers, cvae_pred

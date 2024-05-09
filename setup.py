@@ -68,7 +68,8 @@ setuptools.setup(
         "Development Status :: 5 - Production/Stable",
         "License :: OSI Approved :: MIT License",
         "Programming Language :: Python :: 3.9",
-        "Operating System :: OS Independent"],
+        "Programming Language :: Python :: 3.10",
+        "Operating System :: POSIX :: Linux"],
     url = "https://az7jh2.github.io/SDePER/",    # homepage
     project_urls={
         # additional relevant URLs

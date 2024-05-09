@@ -140,6 +140,7 @@ def cv_find_lambda_r(data, mle_theta, mle_e_alpha, gamma_g, sigma2, lasso_weight
             spot_names: a list of string of spot barcodes. Only keep spots passed filtering.\n
             gene_names: a list of string of gene symbols. Only keep actually used marker genes.\n
             celltype_names: a list of string of celltype names.\n
+            initial_guess: initial guess of cell-type proportions of spatial spots.
     mle_theta : 3-D numpy array (spots * celltypes * 1)
         estimated theta (celltype proportion) by MLE.
     mle_e_alpha : 1-D numpy array
@@ -322,7 +323,7 @@ def cv_find_lambda_r(data, mle_theta, mle_e_alpha, gamma_g, sigma2, lasso_weight
     
     
     
-def cv_find_lambda_g(data, G, theta_mask, gamma_g, sigma2, candidate_list, hybrid_version=True, opt_method='L-BFGS-B', hv_x=None, hv_log_p=None, use_admm=True, use_likelihood=True, k=5, use_cache=True, diagnosis=False):
+def cv_find_lambda_g(data, G, stage1_theta, stage1_e_alpha, theta_mask, gamma_g, sigma2, candidate_list, hybrid_version=True, opt_method='L-BFGS-B', hv_x=None, hv_log_p=None, use_admm=True, use_likelihood=True, k=5, use_cache=True, diagnosis=False):
     '''
     find optimal value for hyper-parameter lambda_g by k fold cross-validation
     
@@ -338,6 +339,13 @@ def cv_find_lambda_g(data, G, theta_mask, gamma_g, sigma2, candidate_list, hybri
             spot_names: a list of string of spot barcodes. Only keep spots passed filtering.\n
             gene_names: a list of string of gene symbols. Only keep actually used marker genes.\n
             celltype_names: a list of string of celltype names.\n
+            initial_guess: initial guess of cell-type proportions of spatial spots.
+    G : built graph object from networks module
+        used for constructing Laplacian Matrix.
+    stage1_theta : 3-D numpy array (spots * celltypes * 1)
+        estimated theta (celltype proportion) in stage 1.
+    stage1_e_alpha : 1-D numpy array
+        estimated e_alpha (spot-specific effect) in stage 1.
     theta_mask : 3-D numpy array (spots * celltypes * 1)
         mask for cell-type proportions (1: present, 0: not present). Only used for stage 2 theta optmization.
     gamma_g : 1-D numpy array
@@ -387,12 +395,18 @@ def cv_find_lambda_g(data, G, theta_mask, gamma_g, sigma2, candidate_list, hybri
     n_spot, n_gene = data['Y'].shape
     
     # re-initialize theta and e_alpha for only present cell-types
+    # update: reuse the result from stage 1
+    '''
     start_theta = np.zeros(theta_mask.shape)
     for i in range(n_spot):
         start_theta[i, theta_mask[i,:,:]==1] = 1.0/np.sum(theta_mask[i,:,:])
     
     start_e_alpha = np.full((n_spot,), 1.0)
-
+    '''
+    
+    start_theta = stage1_theta.copy()
+    start_e_alpha = stage1_e_alpha.copy()
+    
     # random permute the genes
     gene_idx = np.arange(n_gene)
     # set seed for reproducibility

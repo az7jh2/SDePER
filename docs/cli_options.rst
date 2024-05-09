@@ -123,7 +123,7 @@ Output-related options
 
 .. note::
 
-   We do not provide options for renaming output files. All output files are in the same folder as input files.
+   We do not provide options for renaming output files. For Docker/Singularity implementations, the output folder is the mounted folder where the input files are located. For pip/conda installations, the output folder is the current working directory where SDePER is executed.
 
    The cell type deconvolution result file is named as ``celltype_proportions.csv``.
 
@@ -338,7 +338,7 @@ CVAE-related options
 
    .. versionchanged:: 1.1.0
 
-      Default value changed from 1000 to 200.
+      Default value decreased from 1,000 to 200.
 
    .. note::
 
@@ -351,9 +351,13 @@ CVAE-related options
 
    :Type: integer
 
-   :Default: ``500000``
+   :Default: ``100,000``
 
    .. versionadded:: 1.2.0
+
+   .. versionchanged:: 1.3.0
+
+      Default value decreased from 500,000 to 100,000.
 
 
 .. option:: --pseudo_spot_min_cell
@@ -388,7 +392,7 @@ CVAE-related options
 
    :Type: integer
 
-   :Default: ``10000``
+   :Default: ``10,000``
 
 
 .. option:: --cvae_input_scaler
@@ -456,7 +460,7 @@ CVAE-related options
 
 .. option:: --use_spatial_pseudo
 
-   Whether to generate "pseudo-spots" in spatial condition by randomly combining existing spatial spots in CVAE training. When true, half of the total number specified by :option:`n_pseudo_spot` will be created.
+   Whether to generate "pseudo-spots" in spatial condition by randomly combining existing spatial spots in CVAE training. When true, half of the total number specified by :option:`--n_pseudo_spot` will be created.
 
    :Type: boolean
 

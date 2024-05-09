@@ -46,7 +46,8 @@ def one_admm_fit(data, L, theta, e_alpha, gamma_g, sigma2, lambda_r=1.0, lasso_w
             non_zero_mtx: If it's None, then do not filter zeros during regression. If it's a bool 2-D numpy matrix (spots * genes) as False means genes whose nUMI=0 while True means genes whose nUMI>0 in corresponding spots. The bool indicators can be calculated based on either observerd raw nUMI counts in spatial data, or CVAE transformed nUMI counts.\n
             spot_names: a list of string of spot barcodes. Only keep spots passed filtering.\n
             gene_names: a list of string of gene symbols. Only keep actually used marker genes.\n
-            celltype_names: a list of string of celltype names.
+            celltype_names: a list of string of celltype names.\n
+            initial_guess: initial guess of cell-type proportions of spatial spots.
     L : scipy sparse matrix (spots * spots)
         Laplacian matrix
     theta : 3-D numpy array (spots * celltypes * 1)

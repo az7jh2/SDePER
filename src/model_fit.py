@@ -23,7 +23,7 @@ from config import min_val, print, sigma2_digits
 
 
 
-def fit_base_model(data, gamma_g=None, global_optimize=False, hybrid_version=True, opt_method='L-BFGS-B', verbose=False, use_cache=True):
+def fit_base_model(data, gamma_g=None, global_optimize=False, hybrid_version=True, opt_method='L-BFGS-B', verbose=False, use_cache=True, use_initial_guess=False):
     '''
     fit local or base model without any Adaptive Lasso constrain or Graph Laplacian constrain
     
@@ -44,7 +44,8 @@ def fit_base_model(data, gamma_g=None, global_optimize=False, hybrid_version=Tru
             non_zero_mtx: If it's None, then do not filter zeros during regression. If it's a bool 2-D numpy matrix (spots * genes) as False means genes whose nUMI=0 while True means genes whose nUMI>0 in corresponding spots. The bool indicators can be calculated based on either observerd raw nUMI counts in spatial data, or CVAE transformed nUMI counts.\n
             spot_names: a list of string of spot barcodes. Only keep spots passed filtering.\n
             gene_names: a list of string of gene symbols. Only keep actually used marker gene symbols.\n
-            celltype_names: a list of string of celltype names.
+            celltype_names: a list of string of celltype names.\n
+            initial_guess: initial guess of cell-type proportions of spatial spots.
     gamma_g : 1-D numpy array
         gene-specific platform effect for all genes.
     global_optimize : bool, optional
@@ -57,6 +58,8 @@ def fit_base_model(data, gamma_g=None, global_optimize=False, hybrid_version=Tru
         if True, print more information in program running.
     use_cache : bool, optional
         if True, use the cached dict of calculated negative log-likelihood values.
+    use_initial_guess : bool, optional
+        if True, use initial guess instead of uniform distribution for theta initialization.
 
     Returns
     -------
@@ -76,7 +79,17 @@ def fit_base_model(data, gamma_g=None, global_optimize=False, hybrid_version=Tru
         print('\nGLRM model initialization...')
     
     # Initialization
-    theta = np.full((n_spot, n_celltype, 1), 1.0/n_celltype)
+    if use_initial_guess and (data['initial_guess'] is not None):
+        print('HIGHLIGHT: use initial guess derived from CVAE rather than uniform distribution for theta initialization')
+        assert data['initial_guess'].index.to_list() == data['spot_names']
+        assert data['initial_guess'].columns.to_list() == data['celltype_names']
+        theta = data['initial_guess'].values
+        # note the shape is (#spots, #cell-types, 1)
+        # use np.newaxis to add a new third dimension
+        theta = theta[:, :, np.newaxis]
+    else:
+        theta = np.full((n_spot, n_celltype, 1), 1.0/n_celltype)
+        
     e_alpha = np.full((n_spot,), 1.0)
     
     if use_cache:
@@ -160,7 +173,8 @@ def estimating_gamma_g(data, hybrid_version=True, opt_method='L-BFGS-B', verbose
             non_zero_mtx: If it's None, then do not filter zeros during regression. If it's a bool 2-D numpy matrix (spots * genes) as False means genes whose nUMI=0 while True means genes whose nUMI>0 in corresponding spots. The bool indicators can be calculated based on either observerd raw nUMI counts in spatial data, or CVAE transformed nUMI counts.\n
             spot_names: a list of string of spot barcodes. Only keep spots passed filtering.\n
             gene_names: a list of string of gene symbols. Only keep actually used marker gene symbols.\n
-            celltype_names: a list of string of celltype names.
+            celltype_names: a list of string of celltype names.\n
+            initial_guess: initial guess of cell-type proportions of spatial spots.
     hybrid_version : bool, optional
         if True, use the hybrid_version of GLRM, i.e. in ADMM local model loss function optimization for w but adaptive lasso constrain on theta. If False, local model loss function optimization and adaptive lasso will on the same w. The default is True.
     opt_method : string, optional
@@ -191,7 +205,7 @@ def estimating_gamma_g(data, hybrid_version=True, opt_method='L-BFGS-B', verbose
         tmp_data['non_zero_mtx'] = np.sum(data['non_zero_mtx'], axis=0, keepdims=True) > 0
     
     # fit base model
-    theta, e_alpha, _ = fit_base_model(tmp_data, global_optimize=True, hybrid_version=hybrid_version, opt_method=opt_method, verbose=verbose, use_cache=False)
+    theta, e_alpha, _ = fit_base_model(tmp_data, global_optimize=True, hybrid_version=hybrid_version, opt_method=opt_method, verbose=verbose, use_cache=False, use_initial_guess=False)
     
     
     assert(len(e_alpha)==1)
@@ -222,7 +236,8 @@ def fit_model_two_stage(data, G, gamma_g=None, lambda_r=None, weight_threshold=1
             non_zero_mtx: If it's None, then do not filter zeros during regression. If it's a bool 2-D numpy matrix (spots * genes) as False means genes whose nUMI=0 while True means genes whose nUMI>0 in corresponding spots. The bool indicators can be calculated based on either observerd raw nUMI counts in spatial data, or CVAE transformed nUMI counts.\n
             spot_names: a list of string of spot barcodes. Only keep spots passed filtering.\n
             gene_names: a list of string of gene symbols. Only keep actually used marker genes.\n
-            celltype_names: a list of string of celltype names.
+            celltype_names: a list of string of celltype names.\n
+            initial_guess: initial guess of cell-type proportions of spatial spots.
     G : built graph object from networks module
         used for constructing Laplacian Matrix
     gamma_g : 1-D numpy array
@@ -270,7 +285,7 @@ def fit_model_two_stage(data, G, gamma_g=None, lambda_r=None, weight_threshold=1
     
     tmp_start_time = time()
     
-    theta, e_alpha, sigma2 = fit_base_model(data, gamma_g=gamma_g, global_optimize=global_optimize, hybrid_version=hybrid_version, opt_method=opt_method, verbose=True, use_cache=use_cache)
+    theta, e_alpha, sigma2 = fit_base_model(data, gamma_g=gamma_g, global_optimize=global_optimize, hybrid_version=hybrid_version, opt_method=opt_method, verbose=True, use_cache=use_cache, use_initial_guess=True)
     
     print(f'MLE theta estimation finished. Elapsed time: {(time()-tmp_start_time)/60.0:.2f} minutes.')
     
@@ -335,11 +350,28 @@ def fit_model_two_stage(data, G, gamma_g=None, lambda_r=None, weight_threshold=1
     print('\nStage 2: final theta estimation with Graph Laplacian Constrain using already estimated sigma^2 and gamma_g')
     
     # re-initialize theta and e_alpha for only present cell-types
+    # update: reuse the result from stage 1
+    '''
     theta = np.zeros(theta.shape)
     for i in range(n_spot):
         theta[i, theta_mask[i,:,:]==1] = 1.0/np.sum(theta_mask[i,:,:])
     
     e_alpha = np.full((n_spot,), 1.0)
+    '''
+    
+    # note theta shape is (#spots * #celltypes * 1)
+    theta[theta < weight_threshold] = 0
+    tmp_row_sums = theta.sum(axis=1)  # Sum along the second axis, got matrix (#spots * 1)
+    theta = theta / tmp_row_sums[:, np.newaxis] # broadcasting row sum to (#spots * 1 * 1) then performs element-wise division
+    assert theta.shape == theta_mask.shape
+    for i in range(theta.shape[0]):
+        assert abs(np.sum(theta[i,:,:]) - 1) < 1e-8
+    
+    # reuse e_alpha, as it related to spot not cell-types
+    e_alpha = stage1_result['e_alpha']
+    
+    print('HIGHLIGHT: reuse estimated theta and e^alpha in stage 1 as initial value')
+    
     
     if data['A'] is None:
         
@@ -361,7 +393,7 @@ def fit_model_two_stage(data, G, gamma_g=None, lambda_r=None, weight_threshold=1
     
         if isinstance(lambda_g, list):
             print(f'hyper-parameter for Graph Laplacian Constrain: use cross-validation to find the optimal value from {len(lambda_g)} candidates...')
-            lambda_g = cv_find_lambda_g(data, G, theta_mask, gamma_g, sigma2, lambda_g, hybrid_version=hybrid_version, opt_method=opt_method, hv_x=z_hv, hv_log_p=log_p_hv, use_admm=True, use_likelihood=True, use_cache=use_cache, diagnosis=diagnosis)
+            lambda_g = cv_find_lambda_g(data, G, theta, e_alpha, theta_mask, gamma_g, sigma2, lambda_g, hybrid_version=hybrid_version, opt_method=opt_method, hv_x=z_hv, hv_log_p=log_p_hv, use_admm=True, use_likelihood=True, use_cache=use_cache, diagnosis=diagnosis)
     
         # update edge weight in Graph, otherwise edge will have weight 1, then calculate the Laplacian Matrix
         for _, _, e in G.edges(data=True):

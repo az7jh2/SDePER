@@ -84,7 +84,7 @@ def reparameterTheta(theta, e_alpha):
 
 
 
-def read_spatial_data(spatial_file, filter_gene):
+def read_spatial_data(spatial_file, filter_gene, n_hv_gene=0):
     '''
     read spatial data saved as a CSV file by Scanpy
 
@@ -94,10 +94,17 @@ def read_spatial_data(spatial_file, filter_gene):
         full path of input csv file of raw nUMI counts in spatial transcriptomic data (spots * genes).
     filter_gene : bool
         whether to filter genes before DE.
+    n_hv_gene : int
+        number of highly variable genes to be kept in spatial data. If equals 0, all genes are kept.
         
     Returns
     -------
-    a AnnData object
+    spatial_spot_obj : a AnnData object
+        AnnData object of spatial spot data.
+    tmp_df : dataframe
+        dataframe of raw nUMI of spatial data (spots * genes).
+    N : series
+        sequencing depth per spot.
     '''
     
     # Read spatial spot-level data
@@ -124,10 +131,30 @@ def read_spatial_data(spatial_file, filter_gene):
             
     # make a DEEP COPY of raw nUMI count
     spatial_spot_obj.layers['raw_nUMI'] = spatial_spot_obj.X.copy()
+    
+    # calculate sequencing depth per cell, note currently X is nUMI, we make a deep copy to avoid dataframe change
+    tmp_df = spatial_spot_obj.to_df().copy()
+    N = tmp_df.sum(axis=1) # sum also works on sparse dataframe
+    
     # Normalize each cell by total counts over ALL genes
     sc.pp.normalize_total(spatial_spot_obj, target_sum=1, inplace=True)
     
-    return spatial_spot_obj
+    # identify highly variable genes in spatial data, select TOP X HV genes
+    # no need to consider highly variable genes in spatial data, as for cell-type deconvolution, we work on each spot independently
+    if n_hv_gene >= spatial_spot_obj.n_vars:
+        print(f'\nWARNING: use all {spatial_spot_obj.n_vars} genes for downstream analysis as available genes in spatial data <= specified highly varabile gene number {n_hv_gene}')
+    
+    elif n_hv_gene > 0:
+        print(f'\nWARNING: identify {n_hv_gene} highly variable genes from spatial data and keep those genes only...')
+        spatial_hv_genes = sc.pp.highly_variable_genes(spatial_spot_obj, layer='raw_nUMI', flavor='seurat_v3', n_top_genes=n_hv_gene, inplace=False)
+        spatial_hv_genes = spatial_hv_genes.loc[spatial_hv_genes['highly_variable']==True].index.to_list()
+        spatial_spot_obj = spatial_spot_obj[:, spatial_hv_genes].copy()
+        
+        tmp_df = tmp_df[spatial_hv_genes]
+    
+    print(f'remain {spatial_spot_obj.n_obs} spots; {spatial_spot_obj.n_vars} genes for downstream analysis\n')
+    
+    return spatial_spot_obj, tmp_df, N
 
 
 
@@ -208,6 +235,8 @@ def read_scRNA_data(ref_file, ref_anno_file, filter_cell, filter_gene):
     scrna_obj.layers['raw_nUMI'] = scrna_obj.X.copy()
     # Normalize each cell by total counts over ALL genes
     sc.pp.normalize_total(scrna_obj, target_sum=1, inplace=True)
+    
+    print(f'remain {scrna_obj.n_obs} cells; {scrna_obj.n_vars} genes for downstream analysis\n')
     
     return scrna_obj
 
@@ -328,7 +357,7 @@ def run_DE(sc_obj, n_marker_per_cmp, use_fdr, p_val_cutoff, fc_cutoff, pct1_cuto
             if tmp_df.shape[0] <= n_marker_per_cmp:
                 
                 if tmp_df.shape[0] < n_marker_per_cmp:
-                    print(f'WARNING: only {tmp_df.shape[0]} genes passing filtering (<{n_marker_per_cmp}) for {this_celltype} vs {other_celltype}')
+                    print(f'\nWARNING: only {tmp_df.shape[0]} genes passing filtering (<{n_marker_per_cmp}) for {this_celltype} vs {other_celltype}')
                 
                 # no need to further rank, directly select all available genes
                 scrna_marker_genes += tmp_df['names'].to_list()
@@ -365,7 +394,9 @@ def run_DE(sc_obj, n_marker_per_cmp, use_fdr, p_val_cutoff, fc_cutoff, pct1_cuto
             
             tmp_df.rename(columns={'names': 'gene'}, inplace=True)
             de_result_list.append(tmp_df.loc[:, ['gene', 'logfoldchanges', 'pvals', 'pvals_adj', 'pct1', 'pct2', 'celltype1', 'celltype2', 'selected']].copy())
-
+    
+    print('100%')
+    
     scrna_marker_genes = sorted(list(set(scrna_marker_genes)))
     print(f'finally selected {len(scrna_marker_genes)} cell-type marker genes\n')
     
@@ -424,6 +455,7 @@ def run_DE_only(ref_file, ref_anno_file, spatial_genes, n_marker_per_cmp, use_fd
     
     # subset genes
     overlap_genes = list(set(spatial_genes).intersection(set(scrna_obj.var_names)))
+    print(f'get {len(overlap_genes)} overlapped genes between spatial data and reference scRNA-seq data\n')
     #if len(overlap_genes) < len(spatial_genes):
         #print(f'{len(spatial_genes)-len(overlap_genes)} genes in spatial data but not found in scRNA-seq data: {", ".join(set(spatial_genes).difference(set(overlap_genes)))}\n')
     

@@ -1,6 +1,29 @@
 Changelog
 =========
 
+Version 1.3.0 (2024-05-09)
+--------------------------
+
+**Updates**:
+
+* Introduced prediction of cell type proportions utilizing the CVAE latent space. Currently, the proportions are transferred from the scRNA-seq condition to the spatial condition in latent space. Then the predicted cell type proportions are used as initial value of :math:`\theta` for GLRM modeling (`#13 <https://github.com/az7jh2/SDePER/issues/13>`_).
+
+* Reused :math:`\theta` and :math:`e^{\alpha}` estimations from stage 1 of GLRM modeling for initializing stage 2 (`#12 <https://github.com/az7jh2/SDePER/issues/12>`_).
+
+* Increased the weight of spatial spots and scRNA-seq cells in CVAE training against generated pseudo-spots.
+
+* Added support for retaining only highly variable genes in the spatial data. By default all genes are retained.
+
+* SDePER options are written to a text file within the diagnosis folder, and only DE genes are retained in the CVAE-transformed data during saving if command-line option :option:`--redo_de` is ``true``.
+
+* Decreased the default number of command-line option :option:`--n_pseudo_spot` to ``100,000``.
+
+
+**Bug Fixes**:
+
+* Resolved a bug where errors occurred during diagnostic UMAP drawing if only cell type markers were provided, and no scRNA-seq cells were available.
+
+
 Version 1.2.1 (2024-05-03)
 --------------------------
 
@@ -10,7 +33,7 @@ Version 1.2.1 (2024-05-03)
 
 * Added a diagnostic UMAP plot of raw data before platform effect removal using CVAE. Also included new diagnostic plots depicting CVAE training loss.
 
-* Changed the default value of the :option:`--n_marker_per_cmp` command-line option to 20.
+* Changed the default value of the :option:`--n_marker_per_cmp` command-line option to ``20``.
 
 * Added three command-line options: :option:`--use_batch_norm`, :option:`--use_spatial_pseudo` and :option:`--cvae_train_epoch`.
 
@@ -35,7 +58,7 @@ Version 1.1.0 (2024-04-20)
 
 **Updates**:
 
-* Improved differential analysis strategy for maker gene identification. Added 8 new related options and modified the default value of 2 options (`#3 <https://github.com/az7jh2/SDePER/issues/3>`_).
+* Improved differential analysis strategy for maker gene identification. Added 8 new related command-line options and modified the default value of 2 options (`#3 <https://github.com/az7jh2/SDePER/issues/3>`_).
 
 * Updated help messages (`#7 <https://github.com/az7jh2/SDePER/issues/7>`_).
 

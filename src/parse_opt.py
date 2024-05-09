@@ -13,7 +13,7 @@ checking on parameters will also be performed
 
 from getopt import getopt
 import sys, os
-from config import print, input_path, cur_version
+from config import print, input_path, diagnosis_path, cur_version
 import numpy as np
 import pandas as pd
 import copy
@@ -24,7 +24,7 @@ import copy
 default_paramdict = {'spatial_file': None, 'ref_file': None, 'ref_celltype_file': None, 'marker_file': None, 'loc_file': None, 'A_file': None,
                      'n_cores': 1, 'threshold': 0, 'use_cvae': True, 'use_imputation': False, 'diagnosis': False, 'verbose': True,
                      'use_fdr': True, 'p_val_cutoff': 0.05, 'fc_cutoff': 1.2, 'pct1_cutoff': 0.3, 'pct2_cutoff': 0.1, 'sortby_fc': True, 'n_marker_per_cmp': 20, 'filter_cell': True, 'filter_gene': True,
-                     'n_hv_gene': 200,  'n_pseudo_spot': 500000, 'pseudo_spot_min_cell': 2, 'pseudo_spot_max_cell':8, 'seq_depth_scaler': 10000, 'cvae_input_scaler': 10, 'cvae_init_lr':0.01, 'num_hidden_layer': 2, 'use_batch_norm': True, 'cvae_train_epoch': 500, 'use_spatial_pseudo': False, 'redo_de': True, 'seed': 383,
+                     'n_hv_gene': 200,  'n_pseudo_spot': 100000, 'pseudo_spot_min_cell': 2, 'pseudo_spot_max_cell':8, 'seq_depth_scaler': 10000, 'cvae_input_scaler': 10, 'cvae_init_lr':0.01, 'num_hidden_layer': 2, 'use_batch_norm': True, 'cvae_train_epoch': 500, 'use_spatial_pseudo': False, 'redo_de': True, 'seed': 383,
                      'lambda_r': None, 'lambda_r_range_min': 0.1, 'lambda_r_range_max': 100, 'lambda_r_range_k': 8,
                      'lambda_g': None, 'lambda_g_range_min': 0.1, 'lambda_g_range_max': 100, 'lambda_g_range_k': 8,
                      'diameter': 200, 'impute_diameter': [160, 114, 80]
@@ -817,5 +817,15 @@ def parseOpt():
     print('\nrunning options:')
     for k,v in paramdict.items():
         print(f'{k}: {v}')
+        
+    if paramdict['diagnosis']:
+        # need to create subfolders first, otherwise got FileNotFoundError
+        os.makedirs(diagnosis_path, exist_ok=True)
+        
+        # save options to file
+        with open(os.path.join(diagnosis_path, 'SDePER_settings.txt'), "w") as file:
+            for k, v in paramdict.items():
+                file.write(f"{k}: {v}\n")
+
         
     return paramdict
