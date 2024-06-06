@@ -112,7 +112,7 @@ jobs:
                            -l MOB_spatial_spot_loc.csv \
                            --n_marker_per_cmp 5 \
                            -n 64 \
-                           -use_cvae false \
+                           --use_cvae false \
                            --lambda_r 0 \
                            --lambda_g 0 \
                            --use_imputation false \
@@ -237,7 +237,7 @@ jobs:
                            -l MOB_spatial_spot_loc.csv \
                            --n_marker_per_cmp 5 \
                            -n 64 \
-                           -use_cvae false \
+                           --use_cvae false \
                            --lambda_r 0 \
                            --lambda_g 0 \
                            --use_imputation false \
@@ -356,7 +356,7 @@ jobs:
                            -l MOB_spatial_spot_loc.csv \
                            --n_marker_per_cmp 5 \
                            -n 64 \
-                           -use_cvae false \
+                           --use_cvae false \
                            --lambda_r 0 \
                            --lambda_g 0 \
                            --use_imputation false \

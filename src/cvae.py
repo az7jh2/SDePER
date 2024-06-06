@@ -621,7 +621,7 @@ def build_CVAE(spatial_df, scRNA_df, scRNA_celltype, n_marker_per_cmp, n_pseudo_
     
     if use_log_transform:
         # since the input dataframe is extracted from AnnData object, and will not be used in downstream analysis (we can extract from AnnData again), it's safe to modify them directly here
-        print('\nWARNING: first apply log transformation on sequencing depth normalized gene expressions, followed by Min-Max scaling')
+        print('\nHIGHLIGHT: first apply log transformation on sequencing depth normalized gene expressions, followed by Min-Max scaling')
         spatial_df = np.log1p(spatial_df)
         if pseudo_spots_df.shape[0] > 0:
             pseudo_spots_df = np.log1p(pseudo_spots_df)
@@ -826,7 +826,7 @@ def build_CVAE(spatial_df, scRNA_df, scRNA_celltype, n_marker_per_cmp, n_pseudo_
     
     # log transformation back
     if use_log_transform:
-        print('WARNING: when transforming data, after reversed Min-Max Scaling, apply exp transformation then multiple the factor and round to integer')
+        print('HIGHLIGHT: when transforming data, after reversed Min-Max Scaling, apply exp transformation then multiple the factor and round to integer')
         spatial_transformed_df = np.expm1(spatial_transformed_df)
         
     spatial_transformed_numi = np.rint(spatial_transformed_df * depth_scaler)

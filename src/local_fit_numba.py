@@ -6,7 +6,60 @@ Created on Thu May  5 22:17:11 2022
 @author: hill103
 
 this script implement the optimization of theta and sigma^2 using Poisson log-normal distribution + heavy-tail
-use Numba parallel + nested cache dict (supported by Numba) for best performance
+
+use Numba parallel + nested Numba cache dict (finally NOT used) for best performance
+
+we calculate the likelihood for each gene sequentially, utilizing Numba's parallel capabilities to accelerate the computation within each gene's calculation.
+
+we also cached the calculated likelihoods instead of repreated calculation, which depends on the combination of one nUMI, sigma^2, and mu value.
+
+but we failed implement the caching, we tried rounding MU, rounding w, even directly copying MU values as dict keys, using uneven initial w, and we checked the cached likelihoods which match the calculated values, but the optimization only yields solution with all elements being the same value. And the reason is still unknown. One guess is caching affects the searching of direction to take the next step in optimization, even we provide the gradient of w.
+
+NOTE Numba assumes global variables are constants, and does not allow their values to be changed within the JIT-compiled function. In order to modify the cache dict inpalce, we create a wrapper function outside the Numba function, then assign the global cache dict to a local variable when calling Numba function
+
+and print not supported in Numba function
+
+functions for cache Numba dict:
+    
+    initialization:
+        
+        global Numba dicts: empty_mu_dict, empty_y_dict, likelihood_dict
+        
+        global list: unique_nUMI_values (first empty then updated by update_unique_nUMI function)
+        
+    
+    save and retrieve value in likelihood_dict:
+        
+        likelihood_dict indexed by sigma^2 (rounded) -> nUMI value (y; int) -> mu (rounded)
+        
+        Numba functions: retrieve_value, insert_value
+        
+    
+    manage dict sigma^2 keys:
+    
+        insert_key_sigma2_wrapper -> insert_key_sigma2 (Numba function)
+        
+        purge_keys
+
+
+functions for likelihood calculation:
+    
+    calc_hv_numba: Numba function so parallel computing by Numba; calculate likelihoods given an array of y and mu then return; NOT related with cache dict
+    
+    hv_comb: return sum of negative log-likelihoods + gradient of w; used for theta optimization; directly call hv_numba
+    
+    hv_wrapper: return sum of negative log-likelihoods; used for sigma^2 optimization; directly call hv_numba
+    
+    hv_numba: call calc_hv_numba and return array of likelihoods; support caching
+    
+    
+sequence of function calls for parameter optimization:
+    
+    update_theta -> objective_loss_theta -> hv_comb -> hv_numba
+    
+    update_sigma2 -> objective_loss_sigma2 -> hv_wrapper -> hv_numba
+    
+    calcHVBaseModelLoss -> hv_wrapper in hyper parameter tunning
 """
 
 
@@ -93,7 +146,7 @@ class RandomDisplacementBounds(object):
 # start with a empty nested Numba dict
 empty_mu_dict = na.typed.Dict.empty(key_type=na.types.float64, value_type=na.types.float64)
 empty_y_dict = na.typed.Dict.empty(key_type=na.types.int64, value_type=na.typeof(empty_mu_dict))
-neg_log_likelihoods = na.typed.Dict.empty(key_type=na.types.float64, value_type=na.typeof(empty_y_dict))
+likelihood_dict = na.typed.Dict.empty(key_type=na.types.float64, value_type=na.typeof(empty_y_dict))
 
 
 unique_nUMI_values = []
@@ -104,6 +157,8 @@ def update_unique_nUMI(Y):
     update global variable unique_nUMI_values based on the observed gene raw nUMI count in all spots across all included genes
     
     unique_nUMI_values is an array of integers, and is fixed once the spots and genes in regression are determined
+    
+    UPDATE: we add so add Y+1 into dict since calculation of gradient of w needs it
 
     Parameters
     ----------
@@ -116,15 +171,19 @@ def update_unique_nUMI(Y):
 
     '''
     global unique_nUMI_values
-    unique_values = sorted(set(Y.flatten()))
-    print(f'total {len(unique_values)} unique nUMIs, min: {min(unique_values)}, max: {max(unique_values)}')
+    
+    tmp_values = set(Y.flatten())
+    print(f'total {len(tmp_values)} unique nUMIs, min: {min(tmp_values)}, max: {max(tmp_values)}')
+    
+    unique_values = sorted(set(np.concatenate((Y.flatten(), Y.flatten()+1))))
+    print(f'total {len(unique_values)} unique nUMIs for caching, min: {min(unique_values)}, max: {max(unique_values)}')
     unique_nUMI_values = np.array(unique_values, dtype=int)
 
 
 @na.jit(nopython=True, parallel=False, fastmath=False, cache=False)
 def insert_key_sigma2(local_dict, sigma2, unique_nUMI_values, empty_y_dict, empty_mu_dict):
     '''
-    insert a new key of sigma2 to the dict of cached calculated negative log-likelihood values
+    insert a new key of sigma2 to the dict of cached calculated likelihood values
     
     also pre-set the keys for the nested dict
     
@@ -135,7 +194,7 @@ def insert_key_sigma2(local_dict, sigma2, unique_nUMI_values, empty_y_dict, empt
     Parameters
     ----------
     local_dict : Numba dict
-        cached dict containing already calculated negative log-likelihood values
+        cached dict containing already calculated likelihood values
     sigma2 : float
         variance paramter of the lognormal distribution of ln(lambda). All gene share the same variance.
     unique_nUMI_values : 1-D numpy array
@@ -178,8 +237,8 @@ def insert_key_sigma2_wrapper(sigma2):
     -------
     None.
     '''
-    global neg_log_likelihoods, unique_nUMI_values, empty_y_dict, empty_mu_dict
-    insert_key_sigma2(neg_log_likelihoods, sigma2, unique_nUMI_values, empty_y_dict, empty_mu_dict)
+    global likelihood_dict, unique_nUMI_values, empty_y_dict, empty_mu_dict
+    insert_key_sigma2(likelihood_dict, sigma2, unique_nUMI_values, empty_y_dict, empty_mu_dict)
 
 
 def purge_keys(keep_sigma2):
@@ -191,7 +250,7 @@ def purge_keys(keep_sigma2):
     Parameters
     ----------
     local_dict : Numba dict
-        cached dict containing already calculated negative log-likelihood values
+        cached dict containing already calculated likelihood values
     keep_sigma2 : float
         optimized sigma2 for current dataset.
 
@@ -200,13 +259,13 @@ def purge_keys(keep_sigma2):
     None.
 
     '''
-    global neg_log_likelihoods
+    global likelihood_dict
     
-    print(f'total {len(neg_log_likelihoods)} sigma2 keys, only keep key {keep_sigma2} and delete others')
+    print(f'total {len(likelihood_dict)} sigma2 keys, only keep key {keep_sigma2} and delete others')
     
-    for k in list(neg_log_likelihoods.keys()):
+    for k in list(likelihood_dict.keys()):
         if not k == keep_sigma2:
-            del neg_log_likelihoods[k]
+            del likelihood_dict[k]
 
 
 ################################# code related to Poisson heavy-tail density calculation in Python #################################
@@ -288,9 +347,9 @@ def calc_hv_numba(MU, y_vec, hv_x, hv_log_p, output, gamma):
     hv_log_p : 1-D numpy array, optional
         log density values of normal distribution N(0, sigma^2) + heavy-tail. Only used for heavy-tail.
     output : 1-D numpy array
-        negative log-likelihood of input genes in one spot.
+        empty array used to store the calculated values.
     gamma : float
-        increment to calculate the heavy-tail probabilities
+        increment to calculate the heavy-tail probabilities.
     
     Returns
     -------
@@ -320,7 +379,7 @@ def retrieve_value(local_dict, sigma2, y_vec, MU, output):
     Parameters
     ----------
     local_dict : Numba dict
-        cached dict containing already calculated negative log-likelihood values
+        cached dict containing already calculated likelihood values
     sigma2 : float
         variance paramter of the lognormal distribution of ln(lambda). All gene share the same variance.
     y_vec : 1-D numpy array
@@ -328,12 +387,12 @@ def retrieve_value(local_dict, sigma2, y_vec, MU, output):
     MU : 1-D numpy array
         mean value of log-normal distribution for all genes.
     output : 1-D numpy array
-        pre-calculated negative log-likelihood or None of input genes in one spot.
+        an empty array used to store the returned values.
 
     Returns
     -------
     1-D numpy array
-        pre-calculated negative log-likelihood values or None
+        pre-calculated likelihood values or np.nan
     '''
     
     for i in na.prange(y_vec.shape[0]):
@@ -352,7 +411,7 @@ def insert_value(local_dict, sigma2, y_vec, MU, values):
     Parameters
     ----------
     local_dict : Numba dict
-        cached dict containing already calculated negative log-likelihood values
+        cached dict containing already calculated likelihood values
     sigma2 : float
         variance paramter of the lognormal distribution of ln(lambda). All gene share the same variance.
     y_vec : 1-D numpy array
@@ -360,7 +419,7 @@ def insert_value(local_dict, sigma2, y_vec, MU, values):
     MU : 1-D numpy array
         mean value of log-normal distribution for all genes.
     values : 1-D numpy array
-        just calculated negative log-likelihood of input genes in one spot.
+        just calculated likelihoods of input genes in one spot.
 
     Returns
     -------
@@ -376,7 +435,9 @@ def hv_comb(w_vec, y_vec, mu, gamma_g, sigma2, hv_x, hv_log_p, N, use_cache):
     '''
     a function to calculate the negative likelihood value given the distribution parameters considering heavy-tail plus corresponding gradient vector
     
-    this function will be used as target function for optimization
+    also return 1st order derivative vector of w
+    
+    this function will be used as target function for theta optimization
     
     we assume:
         
@@ -410,7 +471,7 @@ def hv_comb(w_vec, y_vec, mu, gamma_g, sigma2, hv_x, hv_log_p, N, use_cache):
     N : float
         sequencing depth for this spot. If is None, use sum(y_vec) instead.
     use_cache : bool, optional
-        if True, use the cached dict of calculated negative log-likelihood values.
+        if True, use the cached dict of calculated likelihood values.
 
     Returns
     -------
@@ -418,14 +479,16 @@ def hv_comb(w_vec, y_vec, mu, gamma_g, sigma2, hv_x, hv_log_p, N, use_cache):
         sum of negative log-likelihood across all genes in one spot + gradient vector of w.
     '''
     # return both negative log-likelihoods and 1st order derivative
+    # The @ operator performs matrix multiplication, w_vec@mu produces a 1-D numpy array with length as number of genes
     MU = np.log(w_vec@mu+min_val) + gamma_g + np.log(N)
     this_lambda = (w_vec@mu) * np.exp(gamma_g) * N
-        
-    likelihoods = calc_hv_numba(MU, y_vec, hv_x, hv_log_p, np.zeros(MU.shape), gamma)
+    
+    likelihoods = hv_numba(MU, y_vec, sigma2, hv_x, hv_log_p, use_cache)
     
     loss = -np.sum(np.log(likelihoods + min_val))
     
-    likelihoods_y_add_1 = calc_hv_numba(MU, y_vec+1, hv_x, hv_log_p, np.zeros(MU.shape), gamma)
+    # for gradient of w
+    likelihoods_y_add_1 = hv_numba(MU, y_vec+1, sigma2, hv_x, hv_log_p, use_cache)
     
     # element-wise operation
     tmp = (y_vec*likelihoods - (y_vec+1)*likelihoods_y_add_1 + min_val) / (this_lambda*likelihoods + min_val)
@@ -441,15 +504,17 @@ def hv_comb(w_vec, y_vec, mu, gamma_g, sigma2, hv_x, hv_log_p, N, use_cache):
 # change it to a normal non-parallel function for optimization
 def hv_numba(MU, y_vec, sigma2, hv_x, hv_log_p, use_cache):
     '''
-    calculate the negative log-likelihood value given the distribution parameters considering heavy-tail
+    calculate the likelihood value given the distribution parameters considering heavy-tail
     
-    MU have already been rounded to 4 digits, and sigma2 has been rounded to 2 digits
+    MU need to be rounded here, and sigma2 has already been rounded if use_cache is true
     
     if use_cache is true, update the cache dict inplace at the same time
     
+    NOTE since we already define the nUMI in cache dict is int64 type, we need to manually cast the array to int64 before passing to the function, otherwise the Numba function will raise type error
+    
     Parameters
     ----------
-    MU : 1-D numpy matrix
+    MU : 1-D numpy array
         mean value of log-normal distribution for all genes.
     y_vec : 1-D numpy array
         observed gene counts of one spot.
@@ -460,98 +525,64 @@ def hv_numba(MU, y_vec, sigma2, hv_x, hv_log_p, use_cache):
     hv_log_p : 1-D numpy array, optional
         log density values of normal distribution N(0, sigma^2) + heavy-tail. Only used for heavy-tail.
     use_cache : bool, optional
-        if True, use the cached dict of calculated negative log-likelihood values.
+        if True, use the cached dict of calculated likelihood values.
 
     Returns
     -------
-    float
-        sum of negative log-likelihood across all genes in one spot.
+    1-D numpy array
+        likelihoods across all genes in one spot.
     '''
     
-    global neg_log_likelihoods, gamma
+    global likelihood_dict, gamma
     
     if use_cache:
         
-        MU = np.round(MU, mu_digits)
+        MU_rounded = np.round(MU, mu_digits)
         
         # first retrieve dict to see how many entries need to be calculate
         # note that it's a numpy array with object type, as it contains None. Update: use numpy.nan instead
-        retri_values = retrieve_value(neg_log_likelihoods, sigma2, y_vec, MU, np.empty(MU.shape))
+        retri_values = retrieve_value(likelihood_dict, sigma2, y_vec.astype(np.int64), MU_rounded, np.empty(MU_rounded.shape))
         
         # numpy.nan in the array means this entry need to be calculated
-        calc_index = np.isnan(retri_values)
+        n_calc = np.sum(np.isnan(retri_values))  # sum over bool array
+        #print(f'total {retri_values.shape[0]} entries, {n_calc} need to be calculated')
         
-        n_calc = np.sum(calc_index)
-        
-        #print(f'total {calc_index.shape[0]} entries, {n_calc} need to be calculated')
-        
-        '''
-        if n_calc < calc_index.shape[0]:
-            print('use cached value')
-        '''
         if n_calc == 0:
-            '''
-            tmp = np.sum(retri_values)
-            assert ~np.isnan(tmp)
-            
-            if not math.isfinite(tmp):
-                for i in range(MU.shape[0]):
-                    print(f'for {MU[i]} - {y_vec[i]}, calc value {calc_hv_numba(np.array([MU[i]]), np.array([y_vec[i]]), hv_x, hv_log_p, np.zeros((1,)), gamma)}, retrieve value {retrieve_value(neg_log_likelihoods, sigma2, np.array([y_vec[i]]), np.array([MU[i]]), np.empty((1,)))}')
-            # test
-                raise Exception('11')'''
-          
-            return -np.sum(np.log(retri_values + min_val))
+            # all needed likelihoods can be retrieved, no new likelihood need to be calculated
+            return retri_values
         
         else:
-            
             # calculate the values for those entries
             # dimension will be kept by array slicing
-            sub_MU = MU[calc_index]
-            sub_y_vec = y_vec[calc_index]
+            # for safe, manually select them since we need to put the newly calculated likelihoods back to the corresponding position
+            sub_MU = []
+            sub_y_vec = []
+            sub_index = []
+            
+            for i in range(retri_values.shape[0]):
+                if np.isnan(retri_values[i]):
+                    sub_MU.append(MU_rounded[i])
+                    sub_y_vec.append(y_vec[i])
+                    sub_index.append(i)
+            
+            sub_MU = np.array(sub_MU)
+            sub_y_vec = np.array(sub_y_vec)
         
             calc_values = calc_hv_numba(sub_MU, sub_y_vec, hv_x, hv_log_p, np.zeros((n_calc,)), gamma)
         
             # update cache dict
-            insert_value(neg_log_likelihoods, sigma2, sub_y_vec, sub_MU, calc_values)
+            insert_value(likelihood_dict, sigma2, sub_y_vec.astype(np.int64), sub_MU, calc_values)
             
-            # test
-            #for i in range(sub_MU.shape[0]):
-            #    print(f'for {sub_MU[i]} - {sub_y_vec[i]}, calc value {calc_hv_numba(np.array([sub_MU[i]]), np.array([sub_y_vec[i]]), hv_x, hv_log_p, np.empty((1,)), gamma)}, retrieve value {retrieve_value(neg_log_likelihoods, sigma2, np.array([sub_y_vec[i]]), np.array([sub_MU[i]]), np.empty((1,)))}')
+            # put calculated values back to the array
+            for i, one_index in enumerate(sub_index):
+                assert np.isnan(retri_values[one_index])
+                retri_values[one_index] = calc_values[i]
             
-            #raise Exception('11')
-        
-            # sum two part of negative log-likelihood values
-            '''
-            tmp = np.sum(calc_values) + np.sum(retri_values[~calc_index])
-            assert ~np.isnan(tmp)
-            
-            if not math.isfinite(tmp):
-                for i in range(MU.shape[0]):
-                    print(f'for {MU[i]} - {y_vec[i]}, calc value {calc_hv_numba(np.array([MU[i]]), np.array([y_vec[i]]), hv_x, hv_log_p, np.zeros((1,)), gamma)}, retrieve value {retrieve_value(neg_log_likelihoods, sigma2, np.array([y_vec[i]]), np.array([MU[i]]), np.empty((1,)))}')
-                raise Exception('12')'''
-            
-            return -np.sum(np.log(calc_values + min_val)) - np.sum(np.log(retri_values[~calc_index] + min_val)) 
+            return retri_values
         
     else:
-        '''
-        tmp = np.sum(calc_hv_numba(MU, y_vec, hv_x, hv_log_p, np.zeros(MU.shape), gamma))
-        
-        if not math.isfinite(tmp):
-            for i in range(MU.shape[0]):
-                print(f'for {MU[i]} - {y_vec[i]}, calc value {calc_hv_numba(np.array([MU[i]]), np.array([y_vec[i]]), hv_x, hv_log_p, np.zeros((1,)), gamma)}')
-            
-            tmp2 = calc_hv_numba(MU, y_vec, hv_x, hv_log_p, np.zeros(MU.shape), gamma)
-            
-            print(tmp2)
-            for i in range(tmp2.shape[0]):
-                print(tmp2[i])
-            
-            
-            
-            raise Exception('13')
-        '''
-        
-        return -np.sum(np.log(calc_hv_numba(MU, y_vec, hv_x, hv_log_p, np.zeros(MU.shape), gamma) + min_val))
+        # do not use cache
+        return calc_hv_numba(MU, y_vec, hv_x, hv_log_p, np.zeros(MU.shape), gamma)
     
 
 
@@ -559,7 +590,7 @@ def hv_wrapper(w_vec, y_vec, mu, gamma_g, sigma2, hv_x, hv_log_p, N, use_cache):
     '''
     a wrapper to calculate the negative log-likelihood value given the distribution parameters considering heavy-tail
     
-    this wrapper will be used as target function for optimization
+    this wrapper will be used as target function for sigma^2 optimization
     
     we assume:
         
@@ -593,7 +624,7 @@ def hv_wrapper(w_vec, y_vec, mu, gamma_g, sigma2, hv_x, hv_log_p, N, use_cache):
     N : float
         sequencing depth for this spot. If is None, use sum(y_vec) instead.
     use_cache : bool, optional
-        if True, use the cached dict of calculated negative log-likelihood values.
+        if True, use the cached dict of calculated likelihood values.
 
     Returns
     -------
@@ -602,13 +633,10 @@ def hv_wrapper(w_vec, y_vec, mu, gamma_g, sigma2, hv_x, hv_log_p, N, use_cache):
     '''
     
     MU = np.log(w_vec@mu+min_val) + gamma_g + np.log(N)
+    likelihoods = hv_numba(MU, y_vec, sigma2, hv_x, hv_log_p, use_cache)
+    loss = -np.sum(np.log(likelihoods + min_val))
     
-    result = hv_numba(MU, y_vec, sigma2, hv_x, hv_log_p, use_cache)
-    
-    if not math.isfinite(result):
-        raise Exception('Error: w optimization in local model of one spot gets a non-finite log-likelihood!')
-    
-    return result
+    return loss
 
 
 
@@ -618,7 +646,9 @@ def objective_loss_theta(w_vec, y_vec, mu, gamma_g, sigma2, nu_vec, rho, lambda_
     '''
     calculate loss function for updating theta (celltype proportion)
     
-    the loss function contains three parts (defined for each spot separately)
+    the loss function contains four parts (defined for each spot separately)
+    
+    also return gradient of w
     
     1. negative log-likelihood of the base model given observed data and initial parameter value. It sums across all genes
     
@@ -670,7 +700,7 @@ def objective_loss_theta(w_vec, y_vec, mu, gamma_g, sigma2, nu_vec, rho, lambda_
     N : float
         sequencing depth for this spot. If is None, use sum(y_vec) instead.
     use_cache : bool, optional
-        if True, use the cached dict of calculated negative log-likelihood values.
+        if True, use the cached dict of calculated likelihood values.
     
     Returns
     -------
@@ -753,7 +783,7 @@ def objective_loss_theta(w_vec, y_vec, mu, gamma_g, sigma2, nu_vec, rho, lambda_
                 # L2 loss on w
                 return (lambda_l2 * np.inner(np.square(w_vec)), lambda_l2*2*w_vec)
     
-    
+    # combine loss and gradient on w separately
     return tuple([a+b+c+d for a,b,c,d in zip(hv_comb(w_vec, y_vec, mu, gamma_g, sigma2, hv_x, hv_log_p, N, use_cache), admm_penalty_loss(), adaptive_lasso_loss(), l2_loss())])
 
 
@@ -829,7 +859,7 @@ def update_theta(data, warm_start_theta, warm_start_e_alpha, gamma_g, sigma2, nu
     verbose : bool, optional
         if True, print more information.
     use_cache : bool, optional
-        if True, use the cached dict of calculated negative log-likelihood values.
+        if True, use the cached dict of calculated likelihood values.
         
     Returns
     -------
@@ -916,6 +946,7 @@ def update_theta(data, warm_start_theta, warm_start_e_alpha, gamma_g, sigma2, nu
         # bounds : tuple of tuples
         #    sequence of (min, max) pairs for each element in w_vec
         # min not set as 0 to avoid divided by 0 or log(0)
+        # if jac is a Boolean and is True, fun is assumed to return a tuple (f, g) containing the objective function and the gradient
         
         #from time import time
         #start_time = time()
@@ -944,10 +975,16 @@ def update_theta(data, warm_start_theta, warm_start_e_alpha, gamma_g, sigma2, nu
             if sol.status != 0:
                 if verbose:
                     # status 2: Maximum number of iterations has been exceeded
-                    print(f'WARNING: w optimization in local model of spot {i:d} not successful! Caused by: {sol.message}')
+                    print(f'WARNING: w optimization in local model of spot {data["spot_names"][i]} not successful! Caused by: {sol.message}')
         
         if sum(sol.x) == 0:
-            raise Exception('Error: w optimization in local model of spot {spot_idx:d} returns all 0s!')
+            print(f'###### Error: w optimization in local model of spot {data["spot_names"][i]} returns all 0s! ######')
+            
+        if np.any(np.isnan(sol.x)):
+            print(f'###### Error: w optimization in local model of spot {data["spot_names"][i]} returns NaN value! ######')
+           
+        if np.any(np.isinf(sol.x)):
+            print(f'###### Error: w optimization in local model of spot {data["spot_names"][i]} returns Infinite value! ######')
         
         # transform back theta, adding non-present values
         if theta_mask is None:
@@ -1028,7 +1065,7 @@ def update_sigma2(data, theta, e_alpha, gamma_g, sigma2, opt_method='L-BFGS-B', 
     verbose : bool, optional
         if True, print more information.
     use_cache : bool, optional
-        if True, use the cached dict of calculated negative log-likelihood values.
+        if True, use the cached dict of calculated likelihood values.
         
     Returns
     -------
@@ -1134,6 +1171,7 @@ def update_sigma2(data, theta, e_alpha, gamma_g, sigma2, opt_method='L-BFGS-B', 
     
     if not math.isfinite(sol.x[0]):
         raise Exception('Error: sigma2 optimization in local model of all spots returns a non-finite value!')
+        
     
     # the solution in x is a numpy array
     return sol.x[0]

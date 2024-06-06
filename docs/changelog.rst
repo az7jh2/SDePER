@@ -1,6 +1,16 @@
 Changelog
 =========
 
+Version 1.3.1 (2024-06-06)
+--------------------------
+
+**Updates**:
+
+* Added a step to remove mitochondrial genes during preprocessing.
+
+* Introduced a PCA plot for visualizing the latent space and added density estimation based on PCA in diagnostic figures.
+
+
 Version 1.3.0 (2024-05-09)
 --------------------------
 

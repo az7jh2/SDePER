@@ -104,7 +104,7 @@ def run_GLRM(data, lambda_r=None, weight_threshold=1e-3, lambda_g=None, estimate
     from local_fit_numba import update_unique_nUMI
     update_unique_nUMI(data['Y'])
     
-    use_cache = False
+    use_cache = False  # finally NOT use it
     if use_cache:
         print('HIGHLIGHT: use dict to cache likelihoods in regression for quick calculation')
     

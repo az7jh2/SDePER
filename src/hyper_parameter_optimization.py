@@ -92,7 +92,7 @@ def calcHVBaseModelLoss(theta, e_alpha, y, mu, gamma_g, sigma2, hv_x, hv_log_p, 
     non_zero_mtx : None or 2-D numpy matrix (spots * genes)
         If it's None, then do not filter zeros during regression. If it's a bool 2-D numpy matrix (spots * genes) as False means genes whose nUMI=0 while True means genes whose nUMI>0 in corresponding spots. The bool indicators can be calculated based on either observerd raw nUMI counts in spatial data, or CVAE transformed nUMI counts.
     use_cache : bool, optional
-        if True, use the cached dict of calculated negative log-likelihood values.
+        if True, use the cached dict of calculated likelihood values.
         
     Returns
     -------
@@ -168,7 +168,7 @@ def cv_find_lambda_r(data, mle_theta, mle_e_alpha, gamma_g, sigma2, lasso_weight
     k : int, optional
         the number of folds in cross-validation, The default value is 5.
     use_cache : bool, optional
-        if True, use the cached dict of calculated negative log-likelihood values.
+        if True, use the cached dict of calculated likelihood values.
     diagnosis : bool
         if True save more information to files for diagnosis CVAE and hyper-parameter selection
         
@@ -369,7 +369,7 @@ def cv_find_lambda_g(data, G, stage1_theta, stage1_e_alpha, theta_mask, gamma_g,
     k : int, optional
         the number of folds in cross-validation, The default value is 5.
     use_cache : bool, optional
-        if True, use the cached dict of calculated negative log-likelihood values.
+        if True, use the cached dict of calculated likelihood values.
     diagnosis : bool
         if True save more information to files for diagnosis CVAE and hyper-parameter selection
         

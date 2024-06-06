@@ -112,7 +112,7 @@ def one_admm_fit(data, L, theta, e_alpha, gamma_g, sigma2, lambda_r=1.0, lasso_w
     verbose : bool, optional
         if True, print information in each ADMM loop
     use_cache : bool, optional
-        if True, use the cached dict of calculated negative log-likelihood values.
+        if True, use the cached dict of calculated likelihood values.
 
     Returns
     -------

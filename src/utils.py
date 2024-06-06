@@ -152,7 +152,17 @@ def read_spatial_data(spatial_file, filter_gene, n_hv_gene=0):
         
         tmp_df = tmp_df[spatial_hv_genes]
     
-    print(f'remain {spatial_spot_obj.n_obs} spots; {spatial_spot_obj.n_vars} genes for downstream analysis\n')
+    # after sequencing depth calculation and normalization we remove mitochondrial genes
+    non_mt_genes = [gene for gene in spatial_spot_obj.var_names if not gene.startswith('MT-') ]
+    n_mt_genes = spatial_spot_obj.n_vars - len(non_mt_genes)
+    print(f'filtering {n_mt_genes} mitochondrial genes\n')
+    
+    if n_mt_genes > 0:
+        # the same filtering will be applied to all layers
+        spatial_spot_obj = spatial_spot_obj[:, non_mt_genes].copy()
+        tmp_df = tmp_df[non_mt_genes]
+    
+    print(f'finally remain {spatial_spot_obj.n_obs} spots; {spatial_spot_obj.n_vars} genes for downstream analysis\n')
     
     return spatial_spot_obj, tmp_df, N
 
@@ -236,7 +246,15 @@ def read_scRNA_data(ref_file, ref_anno_file, filter_cell, filter_gene):
     # Normalize each cell by total counts over ALL genes
     sc.pp.normalize_total(scrna_obj, target_sum=1, inplace=True)
     
-    print(f'remain {scrna_obj.n_obs} cells; {scrna_obj.n_vars} genes for downstream analysis\n')
+    # after sequencing depth calculation and normalization we remove mitochondrial genes
+    non_mt_genes = [gene for gene in scrna_obj.var_names if not gene.startswith('MT-') ]
+    n_mt_genes = scrna_obj.n_vars - len(non_mt_genes)
+    print(f'filtering {n_mt_genes} mitochondrial genes\n')
+    if n_mt_genes > 0:
+        # the same filtering will be applied to all layers
+        scrna_obj = scrna_obj[:, non_mt_genes].copy()
+    
+    print(f'finally remain {scrna_obj.n_obs} cells; {scrna_obj.n_vars} genes for downstream analysis\n')
     
     return scrna_obj
 

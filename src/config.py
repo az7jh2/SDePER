@@ -91,8 +91,8 @@ gamma = 4e-3
 """
 define number of digits used for round floats in fast computing the heavy-tail probabilities
 """
-mu_digits = 10
-sigma2_digits = 6
+mu_digits = 3
+sigma2_digits = 2
 
 
 

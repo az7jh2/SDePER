@@ -57,7 +57,7 @@ def fit_base_model(data, gamma_g=None, global_optimize=False, hybrid_version=Tru
     verbose : bool, optional
         if True, print more information in program running.
     use_cache : bool, optional
-        if True, use the cached dict of calculated negative log-likelihood values.
+        if True, use the cached dict of calculated likelihood values.
     use_initial_guess : bool, optional
         if True, use initial guess instead of uniform distribution for theta initialization.
 
@@ -257,7 +257,7 @@ def fit_model_two_stage(data, G, gamma_g=None, lambda_r=None, weight_threshold=1
     verbose : bool, optional
         if True, print more information in program running.
     use_cache : bool, optional
-        if True, use the cached dict of calculated negative log-likelihood values.
+        if True, use the cached dict of calculated likelihood values.
     diagnosis : bool
         if True save more information to files for diagnosis CVAE and hyper-parameter selection
 
