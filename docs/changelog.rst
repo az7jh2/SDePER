@@ -1,6 +1,26 @@
 Changelog
 =========
 
+Version 1.4.0 (2024-06-26)
+--------------------------
+
+**Updates**:
+
+* Added single cell augmentation feature for scRNA-seq reference data.
+
+* Implemented failure steps for handling irregular :math:`\theta` values after optimization.
+
+* Added support for transferring cell type proportions based on PCA or UMAP embeddings of latent space, or directly on the original latent space in cell type proportion prediction using CVAE.
+
+* Introduced caching in GLRM to accelerate computations by storing calculated likelihood values, reducing duplicate calculations. Note: This feature is disabled by default due to potential optimization failures caused by unknown reasons (`#5 <https://github.com/az7jh2/SDePER/issues/5>`_).
+
+**Bug Fixes**:
+
+* Resolved issue with spot name inconsistencies when spots are filtered out if cell type proportions predicted by CVAE were used for :math:`\theta` initialization in GLRM modeling.
+
+* Fixed bug causing errors when plotting CVAE loss during training in the absence of validation data.
+
+
 Version 1.3.1 (2024-06-06)
 --------------------------
 
@@ -8,7 +28,7 @@ Version 1.3.1 (2024-06-06)
 
 * Added a step to remove mitochondrial genes during preprocessing.
 
-* Introduced a PCA plot for visualizing the latent space and added density estimation based on PCA in diagnostic figures.
+* Introduced a PCA plot for visualizing the CVAE latent space and added density estimation based on PCA in diagnostic figures.
 
 
 Version 1.3.0 (2024-05-09)

@@ -176,7 +176,7 @@ def update_unique_nUMI(Y):
     print(f'total {len(tmp_values)} unique nUMIs, min: {min(tmp_values)}, max: {max(tmp_values)}')
     
     unique_values = sorted(set(np.concatenate((Y.flatten(), Y.flatten()+1))))
-    print(f'total {len(unique_values)} unique nUMIs for caching, min: {min(unique_values)}, max: {max(unique_values)}')
+    #print(f'total {len(unique_values)} unique nUMIs for caching, min: {min(unique_values)}, max: {max(unique_values)}')
     unique_nUMI_values = np.array(unique_values, dtype=int)
 
 
@@ -977,22 +977,42 @@ def update_theta(data, warm_start_theta, warm_start_e_alpha, gamma_g, sigma2, nu
                     # status 2: Maximum number of iterations has been exceeded
                     print(f'WARNING: w optimization in local model of spot {data["spot_names"][i]} not successful! Caused by: {sol.message}')
         
+        solve_fail_flag = False
+        
         if sum(sol.x) == 0:
             print(f'###### Error: w optimization in local model of spot {data["spot_names"][i]} returns all 0s! ######')
+            solve_fail_flag = True
             
         if np.any(np.isnan(sol.x)):
             print(f'###### Error: w optimization in local model of spot {data["spot_names"][i]} returns NaN value! ######')
+            solve_fail_flag = True
            
         if np.any(np.isinf(sol.x)):
             print(f'###### Error: w optimization in local model of spot {data["spot_names"][i]} returns Infinite value! ######')
+            solve_fail_flag = True
+            
+        if solve_fail_flag:
+            # replace NaN or Infinite as 0
+            this_sol = np.nan_to_num(sol.x, nan=0.0, posinf=0.0, neginf=0.0)
+            if sum(this_sol) == 0:
+                # reset w to all elements equal
+                tmp_len = this_sol.shape[0]
+                this_sol = np.full((tmp_len,), 1.0/tmp_len) * this_warm_start_e_alpha
+                print('reset w to all elements identical')
+            else:
+                # renormalize to sum to 1
+                this_sol = this_sol / sum(this_sol)
+                print('repalce non-numeric value as 0 then re-normalize to sum to 1')
+        else:
+            this_sol = sol.x
         
         # transform back theta, adding non-present values
         if theta_mask is None:
-            results.append(sol.x)
-        else:
-            this_sol = np.zeros((n_celltype,))
-            this_sol[this_present_celltype_index.flatten()] = sol.x
             results.append(this_sol)
+        else:
+            this_sol_full = np.zeros((n_celltype,))
+            this_sol_full[this_present_celltype_index.flatten()] = this_sol
+            results.append(this_sol_full)
     
     # collect results: theta and e_alpha
     theta_results = np.zeros((n_spot, n_celltype, 1))

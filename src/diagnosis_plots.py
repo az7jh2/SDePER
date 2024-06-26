@@ -30,6 +30,8 @@ from sklearn.decomposition import PCA
 def plotCVAELoss(history):
     '''
     plot training and validation loss in CVAE training
+    
+    NOTE validation loss may be unavailable if no validation data in training
 
     Parameters
     ----------
@@ -63,12 +65,14 @@ def plotCVAELoss(history):
     # Training KL Loss
     plt.plot(history.history['KL_loss'], color='#1f77b4', marker='o', label='Training KL Loss')
     # Validation KL Loss
-    plt.plot(history.history['val_KL_loss'], color='#ff7f0e', marker='o', label='Validation KL Loss')
+    if 'val_KL_loss' in history.history:
+        plt.plot(history.history['val_KL_loss'], color='#ff7f0e', marker='o', label='Validation KL Loss')
 
     # Training Reconstruction Loss
     plt.plot(history.history['reconstruction_loss'], color='#1f77b4', marker='s', linestyle='dashed', label='Training Reconstruction Loss')
     # Validation Reconstruction Loss
-    plt.plot(history.history['val_reconstruction_loss'], color='#ff7f0e', marker='s', linestyle='dashed', label='Validation Reconstruction Loss')
+    if 'val_reconstruction_loss' in history.history:
+        plt.plot(history.history['val_reconstruction_loss'], color='#ff7f0e', marker='s', linestyle='dashed', label='Validation Reconstruction Loss')
     
     # Adding labels
     plt.xlabel('Epoch')
@@ -201,7 +205,7 @@ def rawInputUMAP(spatial_df, scRNA_df, scRNA_celltype, plot_colors):
 
 
 
-def diagnosisCVAE(cvae, encoder, decoder, spatial_embed, spatial_transformed_df, spatial_transformed_numi, pseudo_spatial_embed, scRNA_celltype, celltype_order, celltype_count_dict, scrna_cell_celltype_prop, scRNA_embed, pseudo_spots_celltype_prop, n_cell_in_spot, pseudo_spot_embed, scRNA_decode_df, scRNA_decode_avg_df, new_markers, plot_colors):
+def diagnosisCVAE(cvae, encoder, decoder, spatial_embed, spatial_transformed_df, spatial_transformed_numi, pseudo_spatial_embed, scRNA_celltype, celltype_order, celltype_count_dict, scrna_cell_celltype_prop, scRNA_embed, scrna_n_cell, pseudo_spots_celltype_prop, n_cell_in_spot, pseudo_spot_embed, scRNA_decode_df, scRNA_decode_avg_df, new_markers, plot_colors):
     '''
     save CVAE related Keras models to h5 file, generate figures to diagnosis the training of CVAE
 
@@ -231,6 +235,8 @@ def diagnosisCVAE(cvae, encoder, decoder, spatial_embed, spatial_transformed_df,
         scRNA-seq cells cell-type proportions (cells * cell-types)
     scRNA_embed : 2-D numpy array
         mu in latent space of scRNA-seq cells (cells * latent neurons)
+    scrna_n_cell : list
+        number of cells in scRNA-seq data. Note augmented single cells also included
     pseudo_spots_celltype_prop : dataframe
         pseudo-spot cell-type proportions (pseudo-spots * cell-types; NO scRNA-seq cells included)
     n_cell_in_spot : list
@@ -434,7 +440,7 @@ def diagnosisCVAE(cvae, encoder, decoder, spatial_embed, spatial_transformed_df,
     # plot distribution of number of cells in pseudo-spots
     # add number of cells in pseudo-spot to dataframe
     plot_df['n_cell_in_spot'] = np.nan
-    plot_df.loc[plot_df['datatype']=='scrna-cell', 'n_cell_in_spot'] = 1
+    plot_df.loc[plot_df['datatype']=='scrna-cell', 'n_cell_in_spot'] = scrna_n_cell
     plot_df.loc[plot_df['datatype']=='scrna-pseudo', 'n_cell_in_spot'] = n_cell_in_spot
     
     sns.set_style("darkgrid")

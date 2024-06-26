@@ -81,9 +81,17 @@ def fit_base_model(data, gamma_g=None, global_optimize=False, hybrid_version=Tru
     # Initialization
     if use_initial_guess and (data['initial_guess'] is not None):
         print('HIGHLIGHT: use initial guess derived from CVAE rather than uniform distribution for theta initialization')
-        assert data['initial_guess'].index.to_list() == data['spot_names']
+        # NOTE: some spots may be excluded in filtering
         assert data['initial_guess'].columns.to_list() == data['celltype_names']
-        theta = data['initial_guess'].values
+        
+        assert data['initial_guess'].shape[0] >= len(data['spot_names'])
+        if data['initial_guess'].shape[0] == len(data['spot_names']):
+            assert data['initial_guess'].index.to_list() == data['spot_names']
+            theta = data['initial_guess'].values
+        else:
+            # use included spots only
+            theta = data['initial_guess'].loc[data['spot_names']].values
+            
         # note the shape is (#spots, #cell-types, 1)
         # use np.newaxis to add a new third dimension
         theta = theta[:, :, np.newaxis]
