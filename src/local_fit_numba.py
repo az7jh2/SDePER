@@ -873,9 +873,20 @@ def update_theta(data, warm_start_theta, warm_start_e_alpha, gamma_g, sigma2, nu
     n_celltype = data["X"].shape[0]
     n_spot = data["Y"].shape[0]
     
+    # skip optimization if the initial theta corresponding to only one cell-type
+    skip_opt = True
+    
     # prepare parameter tuples for parallel computing
     results = []
     for i in range(n_spot):
+        
+        if skip_opt:
+            this_warm_start_theta = warm_start_theta[i, :, :].flatten()
+            if (this_warm_start_theta==1).any():
+                assert np.sum(this_warm_start_theta) == 1
+                results.append(this_warm_start_theta)
+                #print(f'skip optimization for spot {i} as only one celltype present')
+                continue
         
         if theta_mask is None:
             this_present_celltype_index = None

@@ -378,6 +378,106 @@ def diagnosisCVAE(cvae, encoder, decoder, spatial_embed, spatial_transformed_df,
     plot_df.loc[plot_df['datatype']=='scrna-cell', ['UMAP1', 'UMAP2']].to_csv(os.path.join(diagnosis_path, 'CVAE_latent_space', 'UMAP_coordinates_latent_mu_embedding_scRNA-seq_cells.csv.gz'), compression='gzip')
     
     
+    # NOTE: based on UMAP
+    # plot distribution of number of cells in pseudo-spots
+    # add number of cells in pseudo-spot to dataframe
+    plot_df['n_cell_in_spot'] = np.nan
+    plot_df.loc[plot_df['datatype']=='scrna-cell', 'n_cell_in_spot'] = scrna_n_cell
+    plot_df.loc[plot_df['datatype']=='scrna-pseudo', 'n_cell_in_spot'] = n_cell_in_spot
+    
+    sns.set_style("darkgrid")
+ 
+    # generate a colormap with a specified color for NA (spatial spots), but not work for relplot...
+    # show the full legend of colorbar in relplot, otherwise it will only show a sample of evenly spaced values (The FacetGrid hue is categorical, not continuous)
+    # finally use plt.subplots instead
+    fig, (ax1, ax2) = plt.subplots(1, 2, sharey=True, sharex=True, figsize=(6.4*4, 4.8*2))
+    # left panel: scatter plot of pseudo-spots + scRNA-seq cells
+    tmp_df = plot_df.loc[plot_df['dataset']=='scRNA-seq']
+    sc = ax1.scatter(tmp_df['UMAP1'], tmp_df['UMAP2'], c=tmp_df['n_cell_in_spot'], cmap='cubehelix', s=10, marker='o')
+    ax1.set_title('dataset = scRNA-seq')
+    ax1.set_xlabel('UMAP 1')
+    ax1.set_ylabel('UMAP 2')
+    
+    # right panel: scatter plot of spatial spots + spatial pseudo-spots
+    # first draw spatial pseudo-spots, which lay at the bottom
+    tmp_df = plot_df.loc[plot_df['datatype']=='spatial-pseudo']
+    ax2.scatter(tmp_df['UMAP1'], tmp_df['UMAP2'], color=plot_colors['pseudo'], s=10, marker='o')
+    tmp_df = plot_df.loc[plot_df['datatype']=='spatial-spot']
+    ax2.scatter(tmp_df['UMAP1'], tmp_df['UMAP2'], color=plot_colors[f'spatial ({spatial_embed.shape[0]})'], s=10, marker='o')
+    ax2.set_title('dataset = spatial')
+    ax2.set_xlabel('UMAP 1')
+    ax2.set_ylabel('UMAP 2')
+    
+    # add colorbar with title to the most right (https://stackoverflow.com/questions/13784201/how-to-have-one-colorbar-for-all-subplots, conflict with tight_layout)
+    cbar = fig.colorbar(sc, ax=ax2)
+    cbar.ax.set_title('#cell in spot')
+    
+    fig.tight_layout()
+    fig.savefig(os.path.join(diagnosis_path, 'CVAE_latent_space', 'UMAP_latent_mu_embedding_color_by_num_cell_in_spot.png'))
+    plt.close()
+    
+    
+    # NOTE: based on UMAP
+    # plot distribution of cell-type proportions of each cell-type
+    # create a proportion dataframe with the same row order
+    prop_df = pd.concat([pseudo_spots_celltype_prop,
+                         pd.DataFrame(0, index=['spatial_pseudo' + str(idx) for idx in range(pseudo_spatial_embed.shape[0])], columns=pseudo_spots_celltype_prop.columns),
+                         scrna_cell_celltype_prop,
+                         pd.DataFrame(0, index=spatial_transformed_df.index, columns=pseudo_spots_celltype_prop.columns)
+                        ], ignore_index=False)
+    assert prop_df.shape[0] == plot_df.shape[0]
+    assert (prop_df.index == plot_df.index).all()
+    
+    # save multiple figures into one PDF
+    with PdfPages(os.path.join(diagnosis_path, 'CVAE_latent_space', 'UMAP_latent_mu_embedding_color_by_celltype_proportion.pdf')) as pdf:
+        for this_celltype in celltype_order:
+        
+            # start to plot
+            fig, (ax1, ax2) = plt.subplots(1, 2, sharey=True, sharex=True, figsize=(6.4*4, 4.8*2))
+            
+            # left panel: scatter plot of pseudo-spots + scRNA-seq cells
+            tmp_df = plot_df.loc[plot_df['dataset']=='scRNA-seq']
+            # don't forget the .values
+            tmp_df = tmp_df.assign(proportion = prop_df.loc[plot_df['dataset']=='scRNA-seq', this_celltype].values)
+            
+            sc = ax1.scatter(tmp_df['UMAP1'], tmp_df['UMAP2'], c=tmp_df['proportion'], cmap='cubehelix', s=10, marker='o', norm=Normalize(vmin=0, vmax=1))
+       
+            ax1.set_title('dataset = scRNA-seq')
+            ax1.set_xlabel('UMAP 1')
+            ax1.set_ylabel('UMAP 2')
+        
+            # right panel: scatter plot of spatial spots + spatial pseudo-spots
+            # we also interpolate the grid and draw a contour plot of cell type proportions in right panel
+            grid_x, grid_y = np.mgrid[tmp_df['UMAP1'].min():tmp_df['UMAP1'].max():0.025, tmp_df['UMAP2'].min():tmp_df['UMAP2'].max():0.025]
+            grid_z = griddata(tmp_df.loc[:, ['UMAP1', 'UMAP2']].values, tmp_df['proportion'].values, (grid_x, grid_y), method='linear',  fill_value=np.nan)
+        
+            try:
+                ax2.contourf(grid_x, grid_y, grid_z, cmap='cubehelix', norm=Normalize(vmin=0, vmax=1), alpha=0.3)
+            except:
+                pass
+        
+            # first draw spatial pseudo-spots, which lay at the bottom
+            tmp_df = plot_df.loc[plot_df['datatype']=='spatial-pseudo']
+            ax2.scatter(tmp_df['UMAP1'], tmp_df['UMAP2'], color=plot_colors['pseudo'], s=10, marker='o')
+            tmp_df = plot_df.loc[plot_df['datatype']=='spatial-spot']
+            ax2.scatter(tmp_df['UMAP1'], tmp_df['UMAP2'], color=plot_colors[f'spatial ({spatial_embed.shape[0]})'], s=10, marker='o')
+        
+            ax2.set_title('dataset = spatial')
+            ax2.set_xlabel('UMAP 1')
+            ax2.set_ylabel('UMAP 2')
+        
+            # add colorbar with title
+            cbar = fig.colorbar(sc, ax=ax2)
+            cbar.ax.set_title('proportion')
+        
+            fig.suptitle(this_celltype)
+        
+            fig.tight_layout()
+            
+            pdf.savefig(fig)  # Save the current figure to pdf
+            plt.close(fig)  # Close the figure to free memory
+    
+    
     # plot PCA of latent space of spatial spots and scRNA-seq cells plus pseudo spots
     # the order will affect the point overlay, first row draw first
     all_pca = PCA(n_components=2).fit_transform(np.concatenate((pseudo_spot_embed, pseudo_spatial_embed, scRNA_embed, spatial_embed), axis=0))
@@ -434,106 +534,6 @@ def diagnosisCVAE(cvae, encoder, decoder, spatial_embed, spatial_transformed_df,
         plt.close()
     except:
         pass
-    
-    
-    # UPDATE: change to draw on PCA instead of UMAP
-    # plot distribution of number of cells in pseudo-spots
-    # add number of cells in pseudo-spot to dataframe
-    plot_df['n_cell_in_spot'] = np.nan
-    plot_df.loc[plot_df['datatype']=='scrna-cell', 'n_cell_in_spot'] = scrna_n_cell
-    plot_df.loc[plot_df['datatype']=='scrna-pseudo', 'n_cell_in_spot'] = n_cell_in_spot
-    
-    sns.set_style("darkgrid")
- 
-    # generate a colormap with a specified color for NA (spatial spots), but not work for relplot...
-    # show the full legend of colorbar in relplot, otherwise it will only show a sample of evenly spaced values (The FacetGrid hue is categorical, not continuous)
-    # finally use plt.subplots instead
-    fig, (ax1, ax2) = plt.subplots(1, 2, sharey=True, sharex=True, figsize=(6.4*4, 4.8*2))
-    # left panel: scatter plot of pseudo-spots + scRNA-seq cells
-    tmp_df = plot_df.loc[plot_df['dataset']=='scRNA-seq']
-    sc = ax1.scatter(tmp_df['PC1'], tmp_df['PC2'], c=tmp_df['n_cell_in_spot'], cmap='cubehelix', s=10, marker='o')
-    ax1.set_title('dataset = scRNA-seq')
-    ax1.set_xlabel('PC 1')
-    ax1.set_ylabel('PC 2')
-    
-    # right panel: scatter plot of spatial spots + spatial pseudo-spots
-    # first draw spatial pseudo-spots, which lay at the bottom
-    tmp_df = plot_df.loc[plot_df['datatype']=='spatial-pseudo']
-    ax2.scatter(tmp_df['PC1'], tmp_df['PC2'], color=plot_colors['pseudo'], s=10, marker='o')
-    tmp_df = plot_df.loc[plot_df['datatype']=='spatial-spot']
-    ax2.scatter(tmp_df['PC1'], tmp_df['PC2'], color=plot_colors[f'spatial ({spatial_embed.shape[0]})'], s=10, marker='o')
-    ax2.set_title('dataset = spatial')
-    ax2.set_xlabel('PC 1')
-    ax2.set_ylabel('PC 2')
-    
-    # add colorbar with title to the most right (https://stackoverflow.com/questions/13784201/how-to-have-one-colorbar-for-all-subplots, conflict with tight_layout)
-    cbar = fig.colorbar(sc, ax=ax2)
-    cbar.ax.set_title('#cell in spot')
-    
-    fig.tight_layout()
-    fig.savefig(os.path.join(diagnosis_path, 'CVAE_latent_space', 'PCA_latent_mu_embedding_color_by_num_cell_in_spot.png'))
-    plt.close()
-    
-    
-    # UPDATE: change to draw on PCA instead of UMAP
-    # plot distribution of cell-type proportions of each cell-type
-    # create a proportion dataframe with the same row order
-    prop_df = pd.concat([pseudo_spots_celltype_prop,
-                         pd.DataFrame(0, index=['spatial_pseudo' + str(idx) for idx in range(pseudo_spatial_embed.shape[0])], columns=pseudo_spots_celltype_prop.columns),
-                         scrna_cell_celltype_prop,
-                         pd.DataFrame(0, index=spatial_transformed_df.index, columns=pseudo_spots_celltype_prop.columns)
-                        ], ignore_index=False)
-    assert prop_df.shape[0] == plot_df.shape[0]
-    assert (prop_df.index == plot_df.index).all()
-    
-    # save multiple figures into one PDF
-    with PdfPages(os.path.join(diagnosis_path, 'CVAE_latent_space', 'PCA_latent_mu_embedding_color_by_celltype_proportion.pdf')) as pdf:
-        for this_celltype in celltype_order:
-        
-            # start to plot
-            fig, (ax1, ax2) = plt.subplots(1, 2, sharey=True, sharex=True, figsize=(6.4*4, 4.8*2))
-            
-            # left panel: scatter plot of pseudo-spots + scRNA-seq cells
-            tmp_df = plot_df.loc[plot_df['dataset']=='scRNA-seq']
-            # don't forget the .values
-            tmp_df = tmp_df.assign(proportion = prop_df.loc[plot_df['dataset']=='scRNA-seq', this_celltype].values)
-            
-            sc = ax1.scatter(tmp_df['PC1'], tmp_df['PC2'], c=tmp_df['proportion'], cmap='cubehelix', s=10, marker='o', norm=Normalize(vmin=0, vmax=1))
-       
-            ax1.set_title('dataset = scRNA-seq')
-            ax1.set_xlabel('PC 1')
-            ax1.set_ylabel('PC 2')
-        
-            # right panel: scatter plot of spatial spots + spatial pseudo-spots
-            # we also interpolate the grid and draw a contour plot of cell type proportions in right panel
-            grid_x, grid_y = np.mgrid[tmp_df['PC1'].min():tmp_df['PC1'].max():0.025, tmp_df['PC2'].min():tmp_df['PC2'].max():0.025]
-            grid_z = griddata(tmp_df.loc[:, ['PC1', 'PC2']].values, tmp_df['proportion'].values, (grid_x, grid_y), method='linear',  fill_value=np.nan)
-        
-            try:
-                ax2.contourf(grid_x, grid_y, grid_z, cmap='cubehelix', norm=Normalize(vmin=0, vmax=1), alpha=0.3)
-            except:
-                pass
-        
-            # first draw spatial pseudo-spots, which lay at the bottom
-            tmp_df = plot_df.loc[plot_df['datatype']=='spatial-pseudo']
-            ax2.scatter(tmp_df['PC1'], tmp_df['PC2'], color=plot_colors['pseudo'], s=10, marker='o')
-            tmp_df = plot_df.loc[plot_df['datatype']=='spatial-spot']
-            ax2.scatter(tmp_df['PC1'], tmp_df['PC2'], color=plot_colors[f'spatial ({spatial_embed.shape[0]})'], s=10, marker='o')
-        
-            ax2.set_title('dataset = spatial')
-            ax2.set_xlabel('PC 1')
-            ax2.set_ylabel('PC 2')
-        
-            # add colorbar with title
-            cbar = fig.colorbar(sc, ax=ax2)
-            cbar.ax.set_title('proportion')
-        
-            fig.suptitle(this_celltype)
-        
-            fig.tight_layout()
-            
-            pdf.savefig(fig)  # Save the current figure to pdf
-            plt.close(fig)  # Close the figure to free memory
     
     
     # UMAP of decoded spatial and scRNA-seq cell gene expression

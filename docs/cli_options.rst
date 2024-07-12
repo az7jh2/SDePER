@@ -431,9 +431,13 @@ CVAE-related options
 
    :Type: integer
 
-   :Default: ``2``
+   :Default: ``1``
 
    .. versionadded:: 1.2.0
+
+   .. versionchanged:: 1.5.0
+
+      Default value changed from 2 to 1.
 
 
 .. option:: --use_batch_norm

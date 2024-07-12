@@ -68,7 +68,7 @@ def celltype2props(celltype_anno, celltype_order):
 
 
 
-def transferProps(query, ref, ref_props, n_neighbors=10, sigma=0.3, use_embedding='PCA', pca_dimension=None):
+def transferProps(query, ref, ref_props, n_neighbors=10, sigma=1, use_embedding='PCA', pca_dimension=None):
     '''
     transfer cell-type proportions by select K Nearest Neighbors in ref and take Gaussian weighted average of ref proportions
 
@@ -83,7 +83,7 @@ def transferProps(query, ref, ref_props, n_neighbors=10, sigma=0.3, use_embeddin
     n_neighbors : int, optional
         Number of neighbors to use. The default is 10.
     sigma : float, optional
-        Standard deviation for the Gaussian weighting function. The default is 0.3.
+        Standard deviation for the Gaussian weighting function. The default is 1.
     use_embedding : str, optional
         which embedding to use, either PCA, UMAP or none. The default is PCA.
     pca_dimension : int, optinal
@@ -96,6 +96,7 @@ def transferProps(query, ref, ref_props, n_neighbors=10, sigma=0.3, use_embeddin
     '''
     
     assert query.shape[1] == ref.shape[1]
+    n_celltype = ref_props.shape[1]
     
     if (query.shape[1]<=2) and (use_embedding!='none'):
         print(f'WARNING: original latent space dimension {query.shape[1]} <= 2, no need to use {use_embedding} embedding!')
@@ -128,6 +129,8 @@ def transferProps(query, ref, ref_props, n_neighbors=10, sigma=0.3, use_embeddin
     else:
         raise Exception(f'unknow embedding {use_embedding}')
     
+    print(f'embedding dimension: {query_pc.shape[1]}')
+    
     # perform KNN on query data on reduced dimension
     nbrs = NearestNeighbors(n_neighbors=n_neighbors, algorithm='auto').fit(ref_pc)
     # find nearest neighbors
@@ -147,6 +150,23 @@ def transferProps(query, ref, ref_props, n_neighbors=10, sigma=0.3, use_embeddin
         avg_props = np.sum(weighted_props, axis=0)
         # normalize the proportions to sum to 1
         query_props[i] = avg_props / np.sum(avg_props)
+        
+        # NOTE if all proportions are 0 due to very small weights, the initial guess will be all NaN
+        if pd.isnull(query_props[i]).any():
+            # replace it as a vector with all elements identical
+            query_props[i, :] = np.full((n_celltype,), 1.0/n_celltype)
+            continue
+        
+        # post-process theta to set theta<0.01 as 0 then re-normalize remaining theta to sum to 1
+        tmp_ind = query_props[i, :] < 0.01
+        
+        if tmp_ind.all():
+            # all elements < threashold, just leave it unchanged
+            continue
+        
+        if tmp_ind.any():
+            query_props[i, tmp_ind] = 0
+            query_props[i, :] = query_props[i, :] / np.sum(query_props[i, :])
         
     return query_props
 
@@ -896,10 +916,10 @@ def build_CVAE(spatial_df, scRNA_df, scRNA_celltype, n_marker_per_cmp, n_pseudo_
     cvae, new_decoder = CVAE_keras_model(p, p_cond, latent_dim, hidden_dim[::-1], hidden_dim, use_batch_norm=use_batch_norm, cvae_init_lr=cvae_init_lr)
     
     # learning rate decay
-    lrate = ReduceLROnPlateau(monitor='val_loss', factor=0.9, patience=10, min_lr=5e-4, cooldown=5, verbose=False)
+    lrate = ReduceLROnPlateau(monitor='val_loss', factor=0.9, patience=20, min_lr=5e-4, cooldown=10, verbose=False)
     
     # early stopping based on validation loss
-    early_stop = EarlyStopping(monitor='val_loss', min_delta=0, patience=30, restore_best_weights=True, verbose=False)
+    early_stop = EarlyStopping(monitor='val_loss', min_delta=0, patience=40, restore_best_weights=True, verbose=False)
     
     
     # change tensorflow seed value, set the same seed value for sampling samples from latent space to decoder before training
@@ -1025,7 +1045,7 @@ def build_CVAE(spatial_df, scRNA_df, scRNA_celltype, n_marker_per_cmp, n_pseudo_
         pseudo_spot_embed = encoder.predict([scRNA_min_max_scaler.transform(pseudo_spots_df), np.full((pseudo_spots_df.shape[0],1), 0)])[0]
     
     if do_initial_guess:
-        use_embedding = 'PCA'
+        use_embedding = 'none'
         if use_embedding == 'none':
             print('HIGHLIGHT: got initial guess of cell type proportions based on original CVAE latent embedding')
         else:
@@ -1033,7 +1053,7 @@ def build_CVAE(spatial_df, scRNA_df, scRNA_celltype, n_marker_per_cmp, n_pseudo_
         tmp_pred = transferProps(spatial_embed,
                                  np.vstack((scRNA_embed, pseudo_spot_embed)),
                                  pd.concat([scrna_cell_celltype_prop, pseudo_spots_celltype_prop]).values,
-                                 n_neighbors=10, sigma=0.3, use_embedding=use_embedding)
+                                 n_neighbors=10, sigma=1, use_embedding=use_embedding)
         cvae_pred = pd.DataFrame(tmp_pred, index=spatial_df.index, columns=celltype_order)
         
         if diagnosis:

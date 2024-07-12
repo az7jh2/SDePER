@@ -147,7 +147,7 @@ def run_GLRM(data, lambda_r=None, weight_threshold=1e-3, lambda_g=None, estimate
     result['theta_hat'] = np.squeeze(result['theta_hat'])
     
 
-    # post-process theta to set theta<1e-3 as 0 then re-normalize remaining theta to sum to 1
+    # post-process theta to set theta<XXXX as 0 then re-normalize remaining theta to sum to 1
     print('\nPost-processing estimated cell-type proportion theta...')
     print(f'hard thresholding small theta values with threshold {threshold}')
     for i in range(result['theta'].shape[0]):

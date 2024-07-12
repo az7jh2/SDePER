@@ -1,6 +1,18 @@
 Changelog
 =========
 
+Version 1.5.0 (2024-07-12)
+--------------------------
+
+**Updates**:
+
+* The optimization of cell type proportion :math:`\theta` is skipped if the initial value of :math:`\theta` indicates the presence of only one cell type in the spot.
+
+* When predicting cell type proportions utilizing the CVAE latent space, the values of the CVAE latent space are now directly used instead of PCA embeddings for proportion transferring.
+
+* The default number of hidden layers has been changed from 2 to 1.
+
+
 Version 1.4.0 (2024-06-26)
 --------------------------
 
