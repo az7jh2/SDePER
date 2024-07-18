@@ -1,0 +1,50 @@
+Example Data & Notebooks
+========================
+
+Last updated: 2024-07-16
+
+This vignette provides an overview of the example data and accompanying notebooks available for the SDePER package. The example data includes pairs of spatial data (both simulated and real spatial transcriptomic (ST) datasets) with corresponding reference scRNA-seq data. The notebooks detail the description of the notebook, input data (with links to download the data), SDePER settings, running logs, and links to the corresponding results.
+
+
+Simulated ST data
+-----------------
+
+We generated 5 sets of simulated ST datasets, resulting in 14 combinations of simulated ST and various reference data. For each combination, we provide a link to the corresponding SDePER notebook, which includes links to documentation on the generation of simulated ST data and reference data preprocessing procedures, and links to download the corresponding ST and reference data.
+
++-----------------------------+------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Simulated ST data           | Reference scRNA-seq data                             | Notebook                                                                                                                                                                                     |
++=============================+======================================================+==============================================================================================================================================================================================+
+| STARmap-based simulation    | Internal reference                                   | `GO <https://github.com/az7jh2/SDePER_Analysis/blob/main/Simulation/Run_SDePER_on_simulation_data/Scenario_1/ref_spatial/S1_ref_spatial_SDePER_WITH_CVAE.ipynb>`__                           |
++                             +------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+|                             | External reference                                   | `GO <https://github.com/az7jh2/SDePER_Analysis/blob/main/Simulation/Run_SDePER_on_simulation_data/Scenario_1/ref_scRNA_seq/S1_ref_scRNA_SDePER_WITH_CVAE.ipynb>`__                           |
++                             +------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+|                             | External reference with *Vip* missing                | `GO <https://github.com/az7jh2/SDePER_Analysis/blob/main/Simulation/Run_SDePER_on_simulation_data/Scenario_2/S2_ref_scRNA_SDePER_WITH_CVAE.ipynb>`__                                         |
++                             +------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+|                             | External reference adding irrelevant *high intronic* | `GO <https://github.com/az7jh2/SDePER_Analysis/blob/main/Simulation/Run_SDePER_on_simulation_data/Scenario_3/S3_ref_scRNA_SDePER_WITH_CVAE.ipynb>`__                                         |
++                             +------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+|                             | Internal reference with downsampled *Oligo*          | `GO <https://github.com/az7jh2/SDePER_Analysis/tree/main/Simulation/Run_SDePER_on_simulation_data_with_downsampled_ref/Oligo/Scenario_1/ref_spatial>`__                                      |
++                             +------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+|                             | External reference with downsampled *Oligo*          | `GO <https://github.com/az7jh2/SDePER_Analysis/tree/main/Simulation/Run_SDePER_on_simulation_data_with_downsampled_ref/Oligo/Scenario_1/ref_scRNA_seq>`__                                    |
++-----------------------------+------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| STARmap-based simulation    | Internal reference                                   | `GO <https://github.com/az7jh2/SDePER_Analysis/blob/main/Simulation/Run_SDePER_on_simulation_data_subsetCT/Scenario_1/ref_spatial/S1_ref_spatial_SDePER_WITH_CVAE.ipynb>`__                  |
++ with 5 cell types           +------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+|                             | External reference                                   | `GO <https://github.com/az7jh2/SDePER_Analysis/blob/main/Simulation/Run_SDePER_on_simulation_data_subsetCT/Scenario_1/ref_scRNA_seq/S1_ref_scRNA_SDePER_WITH_CVAE.ipynb>`__                  |
++-----------------------------+------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Sequencing-based simulation | Internal reference                                   | `GO <https://github.com/az7jh2/SDePER_Analysis/blob/main/Simulation_seq_based/Run_SDePER_on_simulation_data/Scenario_1/ref_spatial/S1_ref_spatial_SDePER_WITH_CVAE.ipynb>`__                 |
++                             +------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+|                             | External reference                                   | `GO <https://github.com/az7jh2/SDePER_Analysis/blob/main/Simulation_seq_based/Run_SDePER_on_simulation_data/Scenario_1/ref_scRNA_seq/S1_ref_scRNA_SDePER_WITH_CVAE.ipynb>`__                 |
++-----------------------------+------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Sequencing-based simulation | Internal reference                                   | `GO <https://github.com/az7jh2/SDePER_Analysis/blob/main/Simulation_seq_based/Run_SDePER_on_high_density_simulation_data/Scenario_1/ref_spatial/3x_S1_ref_spatial_SDePER_WITH_CVAE.ipynb>`__ |
++ with 3x higher cell density +------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+|                             | External reference                                   | `GO <https://github.com/az7jh2/SDePER_Analysis/blob/main/Simulation_seq_based/Run_SDePER_on_high_density_simulation_data/Scenario_1/ref_scRNA_seq/3x_S1_ref_scRNA_SDePER_WITH_CVAE.ipynb>`__ |
++-----------------------------+------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Sequencing-based simulation | Internal reference                                   | `GO <https://github.com/az7jh2/SDePER_Analysis/blob/main/Simulation_seq_based/Run_SDePER_on_high_density_simulation_data/Scenario_1/ref_spatial/6x_S1_ref_spatial_SDePER_WITH_CVAE.ipynb>`__ |
++ with 6x higher cell density +------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+|                             | External reference                                   | `GO <https://github.com/az7jh2/SDePER_Analysis/blob/main/Simulation_seq_based/Run_SDePER_on_high_density_simulation_data/Scenario_1/ref_scRNA_seq/6x_S1_ref_scRNA_SDePER_WITH_CVAE.ipynb>`__ |
++-----------------------------+------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+
+
+Real ST data
+------------
+
+We collected 4 real ST datasets and their corresponding reference scRNA-seq datasets for cell type deconvolution. Details of these datasets, preprocessing procedures and SDePER notebooks can be found `here <https://github.com/az7jh2/SDePER_Analysis/tree/main/RealData#overview-of-4-real-spatial-transcriptomics-datasets-and-matched-reference-scrna-seq-datasets>`_. Similarly, the links to download the ST and reference data are available in the notebooks.

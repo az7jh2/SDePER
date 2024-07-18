@@ -75,6 +75,7 @@ Check out :doc:`installation` page for detailed installation instructions, and :
    installation
    usage
    cli_options
+   vignettes
    best_practice
    changelog
 
