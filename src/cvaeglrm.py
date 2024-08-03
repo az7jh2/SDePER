@@ -74,7 +74,7 @@ def main():
     else:
         estimate_gamma_g = True
     
-    
+
     # release RAM before modeling
     #import gc
     #import psutil
@@ -109,15 +109,17 @@ def main():
     # imputation
     if paramdict['use_imputation']:
         
-        from imputation import generate_imputation_expression_map
+        from imputation import do_imputation
         
         print('\n\n######### Start imputation #########')
         
         for x in paramdict['impute_diameter']:
+            print(f'\n\nimputation for {x} µm ...')
             impute_start = time()
-            # 1 µm = 10 pixels
-            result = generate_imputation_expression_map(paramdict['loc_file'], output_file, paramdict['spatial_file'], paramdict['diameter']*10, x*10)
-            # return imputed spot locations, cell-type proportions and gene expressions
+            # we now totally discard the transforming from integer coordinates to pixels
+            # we use stepsize = impute_diameter / diameter inside imputation function
+            result = do_imputation(paramdict['loc_file'], output_file, paramdict['spatial_file'], float(x)/paramdict['diameter'], paramdict['hole_min_spots'], paramdict['preserve_shape'], diagnosis=paramdict['diagnosis'])
+            # return imputed spot locations, cell type proportions and gene expressions
             result[0].to_csv(os.path.join(output_path, f'impute_diameter_{x}_spot_loc.csv'))
             result[1].to_csv(os.path.join(output_path, f'impute_diameter_{x}_spot_celltype_prop.csv'))
             result[2].to_csv(os.path.join(output_path, f'impute_diameter_{x}_spot_gene_norm_exp.csv'))

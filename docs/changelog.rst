@@ -1,6 +1,14 @@
 Changelog
 =========
 
+Version 1.6.0 (2024-08-03)
+--------------------------
+
+**Updates**:
+
+* The :mod:`imputation` module has been completely rewritten, significantly improving contour finding and grid generation for enhanced performance and accuracy (`#1 <https://github.com/az7jh2/SDePER/issues/1>`_).
+
+
 Version 1.5.0 (2024-07-12)
 --------------------------
 

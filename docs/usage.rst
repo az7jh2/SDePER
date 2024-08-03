@@ -59,7 +59,7 @@ Imputation
 SDePER requires **3 input files** for imputation:
 
    1. raw nUMI counts of **spatial transcriptomics data** (spots × genes): ``spatial.csv``
-   2. **row/column integer index** (*x*,*y*) of spots in spatial transcriptomics data (spots × 2): ``spatial_loc.csv``
+   2. **row/column integer index** (*x*, *y*) of spots in spatial transcriptomics data (spots × 2): ``spatial_loc.csv``
    3. **cell type proportions** of spots in spatial transcriptomics data (spots × cell types): ``spatial_prop.csv``
 
 To start imputation with default settings, run:

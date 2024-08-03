@@ -103,7 +103,7 @@ jobs:
             exit 1
           fi
           
-      - name: Test GLRM
+      - name: Test GLRM with imputation
         run: |
           runDeconvolution -q MOB_spatial_spot_nUMI.csv \
                            -r MOB_ref_scRNA_cell_nUMI.csv \
@@ -115,11 +115,11 @@ jobs:
                            --use_cvae false \
                            --lambda_r 0 \
                            --lambda_g 0 \
-                           --use_imputation false \
+                           --use_imputation true \
                            --diagnosis true \
                            --verbose false
       
-      - name: Test SDePER
+      - name: Test SDePER with imputation
         run: |
           runDeconvolution -q MOB_spatial_spot_nUMI.csv \
                            -r MOB_ref_scRNA_cell_nUMI.csv \
@@ -130,7 +130,7 @@ jobs:
                            --n_marker_per_cmp 5 \
                            --n_pseudo_spot 500 \
                            --num_hidden_layer 1 \
-                           --use_batch_norm false \
+                           --use_batch_norm true \
                            --cvae_train_epoch 100 \
                            --use_spatial_pseudo true \
                            -n 64 \
@@ -138,9 +138,16 @@ jobs:
                            --lambda_r_range_k 2 \
                            --lambda_g_range_max 20 \
                            --lambda_g_range_k 2 \
-                           --use_imputation false \
+                           --use_imputation true \
                            --diagnosis true \
                            --verbose false
+      - name: Test imputation
+        run: |
+          runImputation -q MOB_spatial_spot_nUMI.csv \
+                        -l MOB_spatial_spot_loc.csv \
+                        -p celltype_proportions.csv \
+                        --preserve_shape true \
+                        --diagnosis true
       
       - name: Print result
         run: |
@@ -228,7 +235,7 @@ jobs:
             exit 1
           fi
       
-      - name: Test GLRM
+      - name: Test GLRM with imputation
         run: |
           runDeconvolution -q MOB_spatial_spot_nUMI.csv \
                            -r MOB_ref_scRNA_cell_nUMI.csv \
@@ -240,11 +247,11 @@ jobs:
                            --use_cvae false \
                            --lambda_r 0 \
                            --lambda_g 0 \
-                           --use_imputation false \
+                           --use_imputation true \
                            --diagnosis true \
                            --verbose false
       
-      - name: Test SDePER
+      - name: Test SDePER with imputation
         run: |
           runDeconvolution -q MOB_spatial_spot_nUMI.csv \
                            -r MOB_ref_scRNA_cell_nUMI.csv \
@@ -255,7 +262,7 @@ jobs:
                            --n_marker_per_cmp 5 \
                            --n_pseudo_spot 500 \
                            --num_hidden_layer 1 \
-                           --use_batch_norm false \
+                           --use_batch_norm true \
                            --cvae_train_epoch 100 \
                            --use_spatial_pseudo true \
                            -n 64 \
@@ -263,9 +270,17 @@ jobs:
                            --lambda_r_range_k 2 \
                            --lambda_g_range_max 20 \
                            --lambda_g_range_k 2 \
-                           --use_imputation false \
+                           --use_imputation true \
                            --diagnosis true \
                            --verbose false
+                           
+      - name: Test imputation
+        run: |
+          runImputation -q MOB_spatial_spot_nUMI.csv \
+                        -l MOB_spatial_spot_loc.csv \
+                        -p celltype_proportions.csv \
+                        --preserve_shape true \
+                        --diagnosis true
                            
       - name: Print result
         run: |
@@ -347,7 +362,7 @@ jobs:
             exit 1
           fi
       
-      - name: Test GLRM
+      - name: Test GLRM with imputation
         run: |
           docker run --rm -v $(pwd):/data az7jh2/sdeper:${{ env.VERSION_NUMBER }} runDeconvolution -q MOB_spatial_spot_nUMI.csv \
                            -r MOB_ref_scRNA_cell_nUMI.csv \
@@ -359,11 +374,11 @@ jobs:
                            --use_cvae false \
                            --lambda_r 0 \
                            --lambda_g 0 \
-                           --use_imputation false \
+                           --use_imputation true \
                            --diagnosis true \
                            --verbose false
       
-      - name: Test SDePER
+      - name: Test SDePER with imputation
         run: |
           docker run --rm -v $(pwd):/data az7jh2/sdeper:${{ env.VERSION_NUMBER }} runDeconvolution -q MOB_spatial_spot_nUMI.csv \
                            -r MOB_ref_scRNA_cell_nUMI.csv \
@@ -374,7 +389,7 @@ jobs:
                            --n_marker_per_cmp 5 \
                            --n_pseudo_spot 500 \
                            --num_hidden_layer 1 \
-                           --use_batch_norm false \
+                           --use_batch_norm true \
                            --cvae_train_epoch 100 \
                            --use_spatial_pseudo true \
                            -n 64 \
@@ -382,9 +397,17 @@ jobs:
                            --lambda_r_range_k 2 \
                            --lambda_g_range_max 20 \
                            --lambda_g_range_k 2 \
-                           --use_imputation false \
+                           --use_imputation true \
                            --diagnosis true \
                            --verbose false
+                           
+      - name: Test imputation
+        run: |
+          docker run --rm -v $(pwd):/data az7jh2/sdeper:${{ env.VERSION_NUMBER }} runImputation -q MOB_spatial_spot_nUMI.csv \
+                           -l MOB_spatial_spot_loc.csv \
+                           -p celltype_proportions.csv \
+                           --preserve_shape true \
+                           --diagnosis true
       
       - name: Print result
         run: |

@@ -27,7 +27,7 @@ default_paramdict = {'spatial_file': None, 'ref_file': None, 'ref_celltype_file'
                      'n_hv_gene': 200,  'n_pseudo_spot': 100000, 'pseudo_spot_min_cell': 2, 'pseudo_spot_max_cell':8, 'seq_depth_scaler': 10000, 'cvae_input_scaler': 10, 'cvae_init_lr':0.01, 'num_hidden_layer': 1, 'use_batch_norm': True, 'cvae_train_epoch': 500, 'use_spatial_pseudo': False, 'redo_de': True, 'seed': 383,
                      'lambda_r': None, 'lambda_r_range_min': 0.1, 'lambda_r_range_max': 100, 'lambda_r_range_k': 8,
                      'lambda_g': None, 'lambda_g_range_min': 0.1, 'lambda_g_range_max': 100, 'lambda_g_range_k': 8,
-                     'diameter': 200, 'impute_diameter': [160, 114, 80]
+                     'diameter': 200, 'impute_diameter': [160, 114, 80], 'hole_min_spots': 1, 'preserve_shape': False
                     }
 
 
@@ -58,7 +58,7 @@ runDeconvolution [option][value]...
     -r or --ref             input csv file of raw nUMI counts of scRNA-seq data (cells * genes), with absolute or relative path. Rows as cells and columns as genes. Row header as cell barcodes and column header as gene symbols are both required.
     -c or --ref_anno        input csv file of cell-type annotations for all cells in scRNA-seq data, with absolute or relative path. Rows as cells and only 1 column as cell-type annotation. Row header as cell barcodes and column header with arbitrary name are both required.
     -m or --marker          input csv file of already curated cell-type marker gene expression (cell-types * genes; already normalized by sequencing depth), with absolute or relative path. Rows as cell-types and columns as genes. Row header as cell-type names and column header as gene symbols are both required. If marker gene expression is provided, the built-in differential analysis will be skipped and genes from this csv file will be directly used for cell-type deconvolution, as well as CVAE building. If not provided, Wilcoxon rank sum test will be performed to select cell-type marker genes. Default value is {default_paramdict["marker_file"]}.
-    -l or --loc             input csv file of row/column integer index (x,y) of spatial spots (spots * 2), with absolute or relative path. Rows as spots and columns are coordinates x (column index) and y (row index). Row header as spot barcodes and column header "x","y" are both required. NOTE 1) the column header must be either "x" or "y" (lower case), 2) x and y are integer index (1,2,3,...) not pixels. This spot location file is required for imputation. Default value is {default_paramdict["loc_file"]}.
+    -l or --loc             input csv file of row/column integer index (x,y) of spatial spots (spots * 2), with absolute or relative path. Rows as spots and columns are coordinates x (column index) and y (row index). Row header as spot barcodes and column header "x","y" are both required. NOTE 1) the column header must be either "x" or "y" (lower case), 2) x and y are integer index (1,2,3,...) not pixels. This spot location file is required for imputation. And the spot order should be consist with row order in spatial nUMI count data. Default value is {default_paramdict["loc_file"]}.
     -a or --adjacency       input csv file of Adjacency Matrix of spots in spatial transcriptomic data (spots * spots), with absolute or relative path. In Adjacency Matrix, entry value 1 represents corresponding two spots are adjacent spots according to the definition of neighborhood, while value 0 for non-adjacent spots. All diagonal entries are set as 0. Row header and column header as spot barcodes are both required. And the spot order should be consist with row order in spatial data. Default value is {default_paramdict["A_file"]}.
     
     
@@ -66,7 +66,7 @@ runDeconvolution [option][value]...
     
     We do not provide options for renaming output files. All outputs are in the same folder as input files.
     The cell-type deconvolution result file is named as "celltype_proportions.csv".
-    If imputation is enabled, for each specified spot diameter d µm, there will be three more output files: 1) imputed spot locations "impute_diameter_d_spot_loc.csv", 2) imputed spot cell-type proportions "impute_diameter_d_spot_celltype_prop.csv", 3) imputed spot gene expressions (already normalized by sequencing depth of spots) "impute_diameter_d_spot_gene_norm_exp.csv".
+    If imputation is enabled, for each specified spot diameter d µm, there will be three more output files: 1) imputed spot locations "impute_diameter_d_spot_loc.csv", 2) imputed spot cell-type proportions "impute_diameter_d_spot_celltype_prop.csv", 3) imputed spot gene expressions (already normalized by sequencing depth of spots) "impute_diameter_d_spot_gene_norm_exp.csv.gz".
     
     
     --------------- General options -------------------
@@ -129,8 +129,10 @@ runDeconvolution [option][value]...
     
     -------------- imputation related options ---------------
     
-    --diameter              the physical diameter (µm) of spatial spots. Default value is {default_paramdict["diameter"]}.
-    --impute_diameter       the target spot diameter (µm) during imputation. Either one number or an array of numbers separated by "," are supported. Default value is {",".join([str(x) for x in default_paramdict["impute_diameter"]])}, corresponding to the low, medium, high resolution.
+    --diameter              the physical distance (µm) between centers of two neighboring spatial spots. For Spatial Transcriptomics v1.0 technique it's 200 µm. For 10x Genomics Visium technique it's 100 µm. Default value is {default_paramdict["diameter"]}.
+    --impute_diameter       the target distance (µm) between centers of two neighboring spatial spots after imputation. Either one number or an array of numbers separated by "," are supported. Default value is {",".join([str(x) for x in default_paramdict["impute_diameter"]])}, corresponding to the low, medium, high resolution.
+    --hole_min_spots        the minimum number of uncaptured spots required to recognize a hole in the tissue map. Holes with a number of spots less than or equal to this threshold in it are treated as if no hole exists and imputation will be performed within the hole. Default value is {default_paramdict["hole_min_spots"]}, meaning single-spot holes are imputed.
+    --preserve_shape        whether to maintain the shape of the tissue map during imputation. If true, all border points are retained in imputation to preserve the tissue's original shape, although this may result in an irregular imputed grid. Default value is {default_paramdict["preserve_shape"]}.
 ''')
 
 
@@ -183,34 +185,36 @@ def parseOpt():
             filter_gene : whether to filter genes before DE\n
             use_imputation : whether to perform imputation\n
             diameter : the physical diameter of spatial spots\n
-            impute_diameter : target spot diameter for imputation
+            impute_diameter : target spot diameter for imputation\n
+            hole_min_spots : threshold of number of uncaptured spots to validate holes\n
+            preserve_shape : whether to preserve the exact shape of tissue map
     '''
     
-    # 如果没有任何参数，显示提示信息，并退出
+    # If there are no parameters, display prompt information and exit
     if len(sys.argv) == 1:
         print('No options exist!')
         print('Use -h or --help for detailed help!')
         sys.exit(1)
         
-    # 定义命令行参数
-    # 短选项名后的冒号(:)表示该选项必须有附加的参数
-    # 长选项名后的等号(=)表示该选项必须有附加的参数
+    # Define command line parameters.
+    # The colon (:) after the short option name indicates that the option must have an additional argument
+    # The equal sign (=) after the long option name indicates that the option must have an additional argument
     shortargs = 'hq:r:c:m:l:a:o:n:v'
-    longargs = ['help', 'query=', 'ref=', 'ref_anno=', 'marker=', 'loc=', 'adjacency=', 'n_cores=', 'lambda_r=', 'lambda_r_range_min=', 'lambda_r_range_max=', 'lambda_r_range_k=', 'lambda_g=', 'lambda_g_range_min=', 'lambda_g_range_max=', 'lambda_g_range_k=', 'use_cvae=', 'threshold=', 'n_hv_gene=', 'n_marker_per_cmp=', 'n_pseudo_spot=', 'pseudo_spot_min_cell=', 'pseudo_spot_max_cell=', 'seq_depth_scaler=', 'cvae_input_scaler=', 'cvae_init_lr=', 'num_hidden_layer=', 'use_batch_norm=', 'cvae_train_epoch=', 'use_spatial_pseudo=', 'redo_de=', 'seed=', 'diagnosis=', 'verbose=', 'use_fdr=', 'p_val_cutoff=', 'fc_cutoff=', 'pct1_cutoff=', 'pct2_cutoff=', 'sortby_fc=', 'filter_cell=', 'filter_gene=', 'use_imputation=', 'diameter=', 'impute_diameter=', 'version']
+    longargs = ['help', 'query=', 'ref=', 'ref_anno=', 'marker=', 'loc=', 'adjacency=', 'n_cores=', 'lambda_r=', 'lambda_r_range_min=', 'lambda_r_range_max=', 'lambda_r_range_k=', 'lambda_g=', 'lambda_g_range_min=', 'lambda_g_range_max=', 'lambda_g_range_k=', 'use_cvae=', 'threshold=', 'n_hv_gene=', 'n_marker_per_cmp=', 'n_pseudo_spot=', 'pseudo_spot_min_cell=', 'pseudo_spot_max_cell=', 'seq_depth_scaler=', 'cvae_input_scaler=', 'cvae_init_lr=', 'num_hidden_layer=', 'use_batch_norm=', 'cvae_train_epoch=', 'use_spatial_pseudo=', 'redo_de=', 'seed=', 'diagnosis=', 'verbose=', 'use_fdr=', 'p_val_cutoff=', 'fc_cutoff=', 'pct1_cutoff=', 'pct2_cutoff=', 'sortby_fc=', 'filter_cell=', 'filter_gene=', 'use_imputation=', 'diameter=', 'impute_diameter=', 'hole_min_spots=', 'preserve_shape=', 'version']
     
   
-    # 解析命令行参数
-    # sys.argv[0]为python脚本名，后续全为参数
-    # opts为分析出的参数信息，args为不符合格式信息的剩余参数
+    # Parse the command line parameters
+    # `sys.argv[0]` is the name of the python script, the rest are parameters
+    # `opts` contains the parsed parameter information, `args` contains the remaining parameters that do not conform to the format
     opts, args = getopt(sys.argv[1:], shortargs, longargs)
     
-    # 如果存在不符合格式信息的剩余参数，显示提示信息，并退出
+    # If there are remaining parameters that do not conform to the format, display prompt information and exit
     if args:
         print('Invalid options exist!')
         print('Use -h or --help for detailed help')
         sys.exit(1)
         
-    # 定义dict类型的参数集，使得程序更稳健
+    # Define a dict type parameter set to make the program more robust
     # a deep copy
     paramdict = copy.deepcopy(default_paramdict)
     
@@ -230,9 +234,9 @@ def parseOpt():
         if opt in ('-q', '--query'):
             tmp_file = os.path.join(input_path, val)
             if not os.path.isfile(tmp_file):
-                # 输入不是一个确实存在的文件名
+                # the input is not a valid existing filename
                 raise Exception(f'Invalid input file `{tmp_file}` for spatial transcriptomic data!')
-            # 采用realpath函数，获得真实绝对路径
+             # Use the `realpath` function to get the real absolute path
             paramdict['spatial_file'] = os.path.realpath(tmp_file)
             continue
         
@@ -240,9 +244,9 @@ def parseOpt():
         if opt in ('-r', '--ref'):
             tmp_file = os.path.join(input_path, val)
             if not os.path.isfile(tmp_file):
-                # 输入不是一个确实存在的文件名
+                # the input is not a valid existing filename
                 raise Exception(f'Invalid input file `{tmp_file}` for reference scRNA-seq data!')
-            # 采用realpath函数，获得真实绝对路径
+            # Use the `realpath` function to get the real absolute path
             paramdict['ref_file'] = os.path.realpath(tmp_file)
             continue
         
@@ -250,9 +254,9 @@ def parseOpt():
         if opt in ('-c', '--ref_anno'):
             tmp_file = os.path.join(input_path, val)
             if not os.path.isfile(tmp_file):
-                # 输入不是一个确实存在的文件名
+                # the input is not a valid existing filename
                 raise Exception(f'Invalid input file `{tmp_file}` for cell-type annotation of reference scRNA-seq data!')
-            # 采用realpath函数，获得真实绝对路径
+            # Use the `realpath` function to get the real absolute path
             paramdict['ref_celltype_file'] = os.path.realpath(tmp_file)
             continue
         
@@ -260,9 +264,9 @@ def parseOpt():
         if opt in ('-m', '--marker'):
             tmp_file = os.path.join(input_path, val)
             if not os.path.isfile(tmp_file):
-                # 输入不是一个确实存在的文件名
+                # the input is not a valid existing filename
                 raise Exception(f'Invalid input file `{tmp_file}` for marker gene expression!')
-            # 采用realpath函数，获得真实绝对路径
+            # Use the `realpath` function to get the real absolute path
             paramdict['marker_file'] = os.path.realpath(tmp_file)
             continue
         
@@ -270,9 +274,9 @@ def parseOpt():
         if opt in ('-l', '--loc'):
             tmp_file = os.path.join(input_path, val)
             if not os.path.isfile(tmp_file):
-                # 输入不是一个确实存在的文件名
+                # the input is not a valid existing filename
                 raise Exception(f'Invalid input file `{tmp_file}` for spot location of spatial transcriptomic data!')
-            # 采用realpath函数，获得真实绝对路径
+            # Use the `realpath` function to get the real absolute path
             paramdict['loc_file'] = os.path.realpath(tmp_file)
             continue
         
@@ -280,9 +284,9 @@ def parseOpt():
         if opt in ('-a', '--adjacency'):
             tmp_file = os.path.join(input_path, val)
             if not os.path.isfile(tmp_file):
-                # 输入不是一个确实存在的文件名
+                # the input is not a valid existing filename
                 raise Exception('Invalid input file `{tmp_file}` for adjacency matrix of spatial transcriptomic data!')
-            # 采用realpath函数，获得真实绝对路径
+            # Use the `realpath` function to get the real absolute path
             paramdict['A_file'] = os.path.realpath(tmp_file)
             continue
         
@@ -701,12 +705,12 @@ def parseOpt():
                 paramdict['diameter'] = int(float(val))
                 
                 if paramdict['diameter'] <= 0:
-                    print(f'WARNING: option value `{paramdict["diameter"]}` for diameter <= 0! Please use integers > 0. Currently diameter is set to be default value `{default_paramdict["diameter"]}`!')
-                    paramdict['diameter'] = default_paramdict["diameter"]
+                    print(f'WARNING: non-positive option value `{paramdict["diameter"]}` for diameter! Please use positive integer. Currently diameter is set to be default value `{default_paramdict["diameter"]}`!')
+                    paramdict['diameter'] = default_paramdict['diameter']
             except:
                 print(f'WARNING: unrecognized option value `{val}` for diameter! Please use numeric value. Currently diameter is set to be default value `{default_paramdict["diameter"]}`!')
             continue
-        
+
         
         if opt in ('--impute_diameter'):
             
@@ -718,21 +722,43 @@ def parseOpt():
                     tmp_val = int(float(x.strip()))
                     
                     if tmp_val <= 0:
-                        print(f'WARNING: option value `{tmp_val}` for imputate_diameter <= 0! Please use integers > 0. Currently this value will be ignored!')
+                        print(f'WARNING: non-positive option value `{tmp_val}` for impute_diameter! Please use positive integer. Currently this value will be ignored!')
                     else:
                         tmp_list.append(tmp_val)
                 except:
-                    print(f'WARNING: unrecognized option value `{x.strip()}` for imputate_diameter! Please use numeric value. Currently this value will be ignored!')
+                    print(f'WARNING: unrecognized option value `{x.strip()}` for impute_diameter! Please use numeric value. Currently this value will be ignored!')
                     
             if len(tmp_list) == 0:
-                print(f'WARNING: no valid value can be extracted from option value `{val}` for imputate_diameter! Please use one numeric value or an array of numeric values separated by ",". Currently impute_diameter is set to be default value `{",".join([str(x) for x in default_paramdict["impute_diameter"]])}`!')
+                print(f'WARNING: no valid value can be extracted from option value `{val}` for impute_diameter! Please use one numeric value or an array of numeric values separated by ",". Currently impute_diameter is set to be default value `{",".join([str(x) for x in default_paramdict["impute_diameter"]])}`!')
             else:
-                paramdict['impute_diameter'] = tmp_list
+                paramdict['impute_stepsize'] = tmp_list
         
+            continue
+        
+        
+        if opt in ('--hole_min_spots'):
+            try:
+                paramdict['hole_min_spots'] = int(float(val))
+                
+                if paramdict['hole_min_spots'] < 0:
+                    print(f'WARNING: negative option value `{paramdict["hole_min_spots"]}` for hole_min_spots! Please use non-negative integer. Currently hole_min_spots is set to be default value `{default_paramdict["hole_min_spots"]}`!')
+                    paramdict['hole_threshold'] = default_paramdict['hole_min_spots']
+            except:
+                print(f'WARNING: unrecognized option value `{val}` for hole_min_spots! Please use numeric value. Currently hole_min_spots is set to be default value `{default_paramdict["hole_min_spots"]}`!')
+            continue
+        
+        
+        if opt in ('--preserve_shape'):
+            if val.casefold() == 'true'.casefold():
+                paramdict['preserve_shape'] = True
+            elif val.casefold() == 'false'.casefold():
+                paramdict['preserve_shape'] = False
+            else:
+                print(f'WARNING: unrecognized option value `{val}` for preserve_shape! Please use string of true or false. Currently preserve_shape is set to be default value `{default_paramdict["preserve_shape"]}`!')
             continue
     
     
-    # 检查参数是否齐全
+    # double check all options
     for k,v in paramdict.items():
         if v is None:
             if k == 'spatial_file':

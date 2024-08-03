@@ -673,6 +673,7 @@ def plot_imputation(df, grid_df, contours, hierarchy, figname, figsize=(6.4, 4.8
     import matplotlib.pyplot as plt
     import seaborn as sns
     sns.set_theme()
+    sns.set_style('white')
     
     plt.figure(figsize=figsize)
     
@@ -708,10 +709,9 @@ def plot_imputation(df, grid_df, contours, hierarchy, figname, figsize=(6.4, 4.8
     # add generated high resolution grid
     sns.scatterplot(data=grid_df, x='x', y='y', marker='X', color='k')
     
-    directory = os.path.join(output_path, 'diagnosis', 'imputation')
-    if not os.path.exists(directory):
-        os.makedirs(directory)
+    # need to create subfolders first, otherwise got FileNotFoundError
+    os.makedirs(os.path.join(diagnosis_path, 'imputation'), exist_ok=True)
     
-    plt.savefig(os.path.join(directory, figname))
+    plt.savefig(os.path.join(diagnosis_path, 'imputation', figname))
     
     plt.close()
