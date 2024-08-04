@@ -1,6 +1,14 @@
 Changelog
 =========
 
+Version 1.6.1 (2024-08-04)
+--------------------------
+
+**Bug Fixes**:
+
+* Changed the dependency to the headless version of OpenCV to avoid installation issues and since no GUI functionality is required.
+
+
 Version 1.6.0 (2024-08-03)
 --------------------------
 

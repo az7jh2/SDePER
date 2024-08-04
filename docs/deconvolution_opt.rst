@@ -606,7 +606,7 @@ Imputation-related options
 
    :Type: one integer or a string containing an array of numbers separated by ","
 
-   :Default: ``160,114,80``, corresponding to the low, medium, high resolution
+   :Default: ``160,114,80``, corresponding to the low, medium, high resolution for Spatial Transcriptomics v1.0 technique
 
 
 .. option:: --hole_min_spots
