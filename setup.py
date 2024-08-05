@@ -44,7 +44,7 @@ setuptools.setup(
     description = "Spatial Deconvolution method with Platform Effect Removal",
     long_description = long_description,
     long_description_content_type = "text/markdown",
-    python_requires = ">=3.9, <=3.12",    # Specifies Python version support
+    python_requires = ">=3.9, <=3.10",    # Specifies Python version support
     install_requires = requirements,    # Dependencies
     license_files = "LICENSE",    # license file will be include in top-level automatically (failed, specify it in MANIFEST.in)
     package_dir = {"": "src"},    # py files are in src folder
@@ -69,8 +69,6 @@ setuptools.setup(
         "License :: OSI Approved :: MIT License",
         "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
-        "Programming Language :: Python :: 3.11",
-        "Programming Language :: Python :: 3.12",
         "Operating System :: POSIX :: Linux"],
     url = "https://az7jh2.github.io/SDePER/",    # homepage
     project_urls={

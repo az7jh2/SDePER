@@ -5,7 +5,7 @@
 
 ## Quick Start
 
-SDePER currently supports only Linux operating systems such as Ubuntu, and is compatible with Python versions 3.9.12 up to but not including 3.11.
+SDePER currently supports only Linux operating systems such as Ubuntu, and is compatible with Python versions 3.9 up to 3.10.
 
 SDePER can be installed via conda
 
@@ -36,6 +36,6 @@ runDeconvolution -q spatial.csv -r scrna_ref.csv -c scrna_anno.csv -a adjacency.
 
 **Homepage**: [https://az7jh2.github.io/SDePER/](https://az7jh2.github.io/SDePER/).
 
-**Full Documentation** for SDePER is available on [Read the Docs](https://sdeper.readthedocs.io/en/latest/).
+**Full Documentation** for SDePER is available [here](https://sdeper.readthedocs.io/en/latest/).
 
-**Example data and Analysis** using SDePER are available in our GitHub repository [SDePER_Analysis](https://github.com/az7jh2/SDePER_Analysis).
+**Example data and Analysis** using SDePER are summarized in [this page](https://sdeper.readthedocs.io/en/latest/vignettes1.html).
