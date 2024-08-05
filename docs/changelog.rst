@@ -1,6 +1,14 @@
 Changelog
 =========
 
+Version 1.6.2 (2024-08-05)
+--------------------------
+
+**Bug Fixes**:
+
+* Upgrade certain dependencies to ensure successful installation via both PyPI and Conda.
+
+
 Version 1.6.1 (2024-08-04)
 --------------------------
 

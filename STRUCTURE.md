@@ -15,6 +15,7 @@ This document provides a detailed overview of the file and directory organizatio
 - `docs/`: Documentation files.
   - `conf.py`: Sphinx configuration file to customize the documentation build process.
   - `requirements.txt`: Dependencies needed specifically for building the documentation. NOTE The **dependencies required by the package must also be installed** to display the source code in the documentation. To ensure successful documentation builds, we do not impose version restrictions on dependencies.
+  - `_static/`: static asserts for that are used in the documentation, including images and CSS files.
 - `.readthedocs.yaml`: Configuration file for Read the Docs, specifying build parameters and requirements to automate documentation builds.
 
 ## Docker Support
@@ -43,4 +44,5 @@ To publish a package on PyPI, ensure including the following files in addition t
 
 All GitHub Action workflow files are in `.github/workflows/` folder.
 
-* `publish-to-pypi.yml`: publishing package to PyPI trigged by a new release in GitHub.
+- `publish-to-pypi.yml`: publishing package to PyPI trigged by a new release in GitHub.
+- `test-installation.yml`: test SDePER when a new version is released.

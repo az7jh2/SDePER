@@ -593,8 +593,8 @@ def CVAE_keras_model(p, p_cond, latent_dim, p_encoder_lst, p_decoder_lst, hidden
     # by using the Keras functional API, the variables will be created right away without needing to call .build(). When not using API, you can manually call `model.build()`
     cvae = Model([X, cond], decoder_output, name='cvae')
     
-    # Optimizer
-    adam = optimizers.Adam(learning_rate=cvae_init_lr, clipnorm=1.0, decay=0.0)
+    # Optimizer, use old optimizers in legacy namespace
+    adam = optimizers.legacy.Adam(learning_rate=cvae_init_lr, clipnorm=1.0, decay=0.0)
     cvae.compile(optimizer=adam, loss=vae_loss, metrics=[reconstruction_loss, KL_loss], experimental_run_tf_function=True)
     
     
