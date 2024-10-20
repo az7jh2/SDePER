@@ -46,4 +46,4 @@ runDeconvolution -q spatial.csv -r scrna_ref.csv -c scrna_anno.csv -a adjacency.
 
 If you use SDePER, please cite:
 
-Yunqing Liu, Ningshan Li, Ji Qi *et al.* SDePER: a hybrid machine learning and regression method for cell-type deconvolution of spatial barcoding-based transcriptomic data. *Genome Biology* **25**, 271 (2024). https://doi.org/10.1186/s13059-024-03416-2
+Yunqing Liu, Ningshan Li, Ji Qi *et al.* SDePER: a hybrid machine learning and regression method for cell-type deconvolution of spatial barcoding-based transcriptomic data. *Genome Biology* **25**, 271 (2024). [https://doi.org/10.1186/s13059-024-03416-2](https://doi.org/10.1186/s13059-024-03416-2)
