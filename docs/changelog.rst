@@ -1,6 +1,14 @@
 Changelog
 =========
 
+Version 1.6.3 (2024-10-20)
+--------------------------
+
+**Updates**:
+
+* The default values of :option:`--lambda_r_range_max` and :option:`--lambda_g_range_max` have been changed from 100 to 50. The default values of :option:`--lambda_r_range_k` and :option:`--lambda_g_range_k` have been changed from 8 to 6.
+
+
 Version 1.6.2 (2024-08-05)
 --------------------------
 

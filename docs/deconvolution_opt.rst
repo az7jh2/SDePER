@@ -238,7 +238,7 @@ Cell type marker identification options
 
 .. option:: --p_val_cutoff
 
-   Threshold of p value (or FDR if :option:`--use_fdr` is true) in marker genes filtering. Only genes with p value (or FDR if :option:`--use_fdr` is true) <= 0.05 will be kept.
+   Threshold of p value (or FDR if :option:`--use_fdr` is true) in marker genes filtering. By default only genes with p value (or FDR if :option:`--use_fdr` is true) <= 0.05 will be kept.
 
    :Type: float
 
@@ -534,7 +534,11 @@ GLRM hyperparameter-related options
 
    :Type: float
 
-   :Default: ``100``
+   :Default: ``50``
+
+   .. versionchanged:: 1.6.3
+
+      Default value changed from 100 to 50.
 
 
 .. option:: --lambda_r_range_k
@@ -543,7 +547,11 @@ GLRM hyperparameter-related options
 
    :Type: integer
 
-   :Default: ``8``
+   :Default: ``6``
+
+   .. versionchanged:: 1.6.3
+
+      Default value changed from 8 to 6.
 
 
 .. option:: --lambda_g
@@ -574,7 +582,11 @@ GLRM hyperparameter-related options
 
    :Type: float
 
-   :Default: ``100``
+   :Default: ``50``
+
+   .. versionchanged:: 1.6.3
+
+      Default value changed from 100 to 50.
 
 
 .. option:: --lambda_g_range_k
@@ -583,7 +595,11 @@ GLRM hyperparameter-related options
 
    :Type: integer
 
-   :Default: ``8``
+   :Default: ``6``
+
+   .. versionchanged:: 1.6.3
+
+      Default value changed from 8 to 6.
 
 
 .. _deconvolution_opt_imputation:

@@ -25,8 +25,8 @@ default_paramdict = {'spatial_file': None, 'ref_file': None, 'ref_celltype_file'
                      'n_cores': 1, 'threshold': 0, 'use_cvae': True, 'use_imputation': False, 'diagnosis': False, 'verbose': True,
                      'use_fdr': True, 'p_val_cutoff': 0.05, 'fc_cutoff': 1.2, 'pct1_cutoff': 0.3, 'pct2_cutoff': 0.1, 'sortby_fc': True, 'n_marker_per_cmp': 20, 'filter_cell': True, 'filter_gene': True,
                      'n_hv_gene': 200,  'n_pseudo_spot': 100000, 'pseudo_spot_min_cell': 2, 'pseudo_spot_max_cell':8, 'seq_depth_scaler': 10000, 'cvae_input_scaler': 10, 'cvae_init_lr':0.01, 'num_hidden_layer': 1, 'use_batch_norm': True, 'cvae_train_epoch': 500, 'use_spatial_pseudo': False, 'redo_de': True, 'seed': 383,
-                     'lambda_r': None, 'lambda_r_range_min': 0.1, 'lambda_r_range_max': 100, 'lambda_r_range_k': 8,
-                     'lambda_g': None, 'lambda_g_range_min': 0.1, 'lambda_g_range_max': 100, 'lambda_g_range_k': 8,
+                     'lambda_r': None, 'lambda_r_range_min': 0.1, 'lambda_r_range_max': 50, 'lambda_r_range_k': 6,
+                     'lambda_g': None, 'lambda_g_range_min': 0.1, 'lambda_g_range_max': 50, 'lambda_g_range_k': 6,
                      'diameter': 200, 'impute_diameter': [160, 114, 80], 'hole_min_spots': 1, 'preserve_shape': False
                     }
 
