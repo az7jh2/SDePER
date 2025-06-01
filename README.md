@@ -5,7 +5,7 @@
 
 ## Quick Start
 
-SDePER currently supports only Linux operating systems such as Ubuntu, and is compatible with Python versions 3.9 up to 3.10.
+SDePER currently supports only Linux operating systems such as Ubuntu, and is compatible with Python 3.9.x and 3.10.x releases (3.11+ not yet supported).
 
 SDePER can be installed via conda
 

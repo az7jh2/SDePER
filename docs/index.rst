@@ -36,7 +36,7 @@ SDePER (\ **S**\ patial **De**\ convolution method with **P**\ latform **E**\ ff
 Quick Start
 -----------
 
-SDePER currently supports only Linux operating systems such as Ubuntu, and is compatible with Python versions 3.9.12 up to but not including 3.11.
+SDePER currently supports only Linux operating systems such as Ubuntu, and is compatible with Python 3.9.x and 3.10.x releases (3.11+ not yet supported).
 
 SDePER can be installed using conda
 

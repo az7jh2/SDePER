@@ -766,7 +766,8 @@ def build_CVAE(spatial_df, scRNA_df, scRNA_celltype, n_marker_per_cmp, n_pseudo_
         # update count
         celltype_count_dict = scRNA_celltype.celltype.value_counts().to_dict()
         # also update color palette
-        plot_colors = defineColor(spatial_df.shape[0], scRNA_celltype)
+        if diagnosis:
+            plot_colors = defineColor(spatial_df.shape[0], scRNA_celltype)
         
         # split training and validation
         n_train_scrna_cell = int(np.floor(scRNA_df.shape[0] * training_pct))

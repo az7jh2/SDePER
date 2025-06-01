@@ -1,6 +1,14 @@
 Changelog
 =========
 
+Version 1.6.4 (2025-06-01)
+--------------------------
+
+**Bug Fixes**:
+
+* Resolved an error where :py:func:`~diagnosis_plots.defineColor` was not imported when it was called inside the single cell augmentation section while :option:`--diagnosis` was turned off (`#14 <https://github.com/az7jh2/SDePER/issues/14>`_).
+
+
 Version 1.6.3 (2024-10-20)
 --------------------------
 
