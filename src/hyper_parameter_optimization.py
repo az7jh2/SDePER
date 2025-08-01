@@ -15,7 +15,6 @@ the performance metric is RMSE of predicted gene expressions in validation fold
 
 
 
-import networkx as nx
 import numpy as np
 from scipy import sparse
 from math import floor
@@ -323,7 +322,7 @@ def cv_find_lambda_r(data, mle_theta, mle_e_alpha, gamma_g, sigma2, lasso_weight
     
     
     
-def cv_find_lambda_g(data, G, stage1_theta, stage1_e_alpha, theta_mask, gamma_g, sigma2, candidate_list, hybrid_version=True, opt_method='L-BFGS-B', hv_x=None, hv_log_p=None, use_admm=True, use_likelihood=True, k=5, use_cache=True, diagnosis=False):
+def cv_find_lambda_g(data, L, stage1_theta, stage1_e_alpha, theta_mask, gamma_g, sigma2, candidate_list, hybrid_version=True, opt_method='L-BFGS-B', hv_x=None, hv_log_p=None, use_admm=True, use_likelihood=True, k=5, use_cache=True, diagnosis=False):
     '''
     find optimal value for hyper-parameter lambda_g by k fold cross-validation
     
@@ -340,8 +339,8 @@ def cv_find_lambda_g(data, G, stage1_theta, stage1_e_alpha, theta_mask, gamma_g,
             gene_names: a list of string of gene symbols. Only keep actually used marker genes.\n
             celltype_names: a list of string of celltype names.\n
             initial_guess: initial guess of cell-type proportions of spatial spots.
-    G : built graph object from networks module
-        used for constructing Laplacian Matrix.
+    L : scipy sparse matrix
+        already calculated Laplacian Matrix (spots * spots).
     stage1_theta : 3-D numpy array (spots * celltypes * 1)
         estimated theta (celltype proportion) in stage 1.
     stage1_e_alpha : 1-D numpy array
@@ -429,11 +428,9 @@ def cv_find_lambda_g(data, G, stage1_theta, stage1_e_alpha, theta_mask, gamma_g,
         
         print(f'{t/len(candidate_list):.0%}...', end='')
         
-        # update edge weight in Graph, otherwise edge will have weight 1, then calculate the Laplacian Matrix
-        for _, _, e in G.edges(data=True):
-            e["weight"] = lambda_g
-        # calculate Laplacian, result is a SciPy sparse matrix
-        L = nx.laplacian_matrix(G)
+        # UPDATE: multiple the hyperparameter with Laplacian matrix get 𝜆L
+        # note to use deep copy
+        lambda_gL = L.copy() * lambda_g
         
         this_rmse_list = []
         
@@ -463,7 +460,7 @@ def cv_find_lambda_g(data, G, stage1_theta, stage1_e_alpha, theta_mask, gamma_g,
             
             # update theta
             if lambda_g > 0:
-                this_result = one_admm_fit(train_data, L, start_theta, start_e_alpha, train_gamma_g, sigma2,
+                this_result = one_admm_fit(train_data, lambda_gL, start_theta, start_e_alpha, train_gamma_g, sigma2,
                                            lambda_r=0, lasso_weight=None,
                                            hv_x=hv_x, hv_log_p=hv_log_p, theta_mask=theta_mask,
                                            opt_method=opt_method, global_optimize=False, hybrid_version=hybrid_version,
@@ -473,7 +470,7 @@ def cv_find_lambda_g(data, G, stage1_theta, stage1_e_alpha, theta_mask, gamma_g,
                 
             elif lambda_g == 0:
                 if use_admm:
-                    this_result = one_admm_fit(train_data, L, start_theta, start_e_alpha, train_gamma_g, sigma2,
+                    this_result = one_admm_fit(train_data, lambda_gL, start_theta, start_e_alpha, train_gamma_g, sigma2,
                                            lambda_r=0, lasso_weight=None,
                                            hv_x=hv_x, hv_log_p=hv_log_p, theta_mask=theta_mask,
                                            opt_method=opt_method, global_optimize=False, hybrid_version=hybrid_version,

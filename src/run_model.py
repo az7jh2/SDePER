@@ -13,7 +13,6 @@ It receieve the input data, build graph, build GLRM and fit coefficients
 
 
 import numpy as np
-import networkx as nx
 from model_fit import fit_model_two_stage, estimating_gamma_g
 from config import print
 
@@ -71,7 +70,6 @@ def run_GLRM(data, lambda_r=None, weight_threshold=1e-3, lambda_g=None, estimate
         assert(data['A'].shape[1] == data['Y'].shape[0])
     
     n_celltype, n_gene = data['X'].shape
-    n_spot = data['Y'].shape[0]
     
     print('\n\n######### Start GLRM modeling... #########\n')
     
@@ -109,23 +107,10 @@ def run_GLRM(data, lambda_r=None, weight_threshold=1e-3, lambda_g=None, estimate
         print('HIGHLIGHT: use dict to cache likelihoods in regression for quick calculation')
     
     # define graph from adjacency matrix
-    if data['A'] is None:
-        # empty graph
-        G = nx.empty_graph(n_spot)
-    else:
-        np.fill_diagonal(data['A'], 0)
-        rows, cols = np.where(data['A'] == 1)
-        edges = zip(rows.tolist(), cols.tolist())
-        G = nx.Graph()
-        # first add nodes. If only add edges, some isolated nodes will not be added
-        all_rows = range(0, data['A'].shape[0])
-        for n in all_rows:
-            G.add_node(n)
-        G.add_edges_from(edges)
-        # edge weight will be added later
-        
-    print('\nBuild graph: \n', nx.info(G))
-    
+    # UPDATE: we directly work on spatial weight matrix instead of graph object!
+    if data['A'] is not None:
+        n_spot = data['Y'].shape[0]
+        print(f'\nSpatial Weight Matrix: {n_spot:.0f} spots; {np.count_nonzero(data["A"])/2:.0f} non-zero weights\n')
    
     # estimate gamma_g
     if estimate_gamma_g:
@@ -138,7 +123,7 @@ def run_GLRM(data, lambda_r=None, weight_threshold=1e-3, lambda_g=None, estimate
     
     # start fitting model
     # use two-stage implement
-    result = fit_model_two_stage(data, G, gamma_g=gamma_g, lambda_r=lambda_r, weight_threshold=weight_threshold, lambda_g=lambda_g,  global_optimize=global_optimize, hybrid_version=hybrid_version, opt_method=opt_method, verbose=verbose, use_cache=use_cache, diagnosis=diagnosis)
+    result = fit_model_two_stage(data, gamma_g=gamma_g, lambda_r=lambda_r, weight_threshold=weight_threshold, lambda_g=lambda_g,  global_optimize=global_optimize, hybrid_version=hybrid_version, opt_method=opt_method, verbose=verbose, use_cache=use_cache, diagnosis=diagnosis)
     
     
     # change dimension of theta back to 2-D

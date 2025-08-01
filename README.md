@@ -38,7 +38,7 @@ runDeconvolution -q spatial.csv -r scrna_ref.csv -c scrna_anno.csv -a adjacency.
 
 **Full Documentation** for SDePER is available [here](https://sdeper.readthedocs.io/en/latest/).
 
-**Example data and Analysis** using SDePER are summarized in [this page](https://sdeper.readthedocs.io/en/latest/vignettes1.html).
+**Example data and Analysis** using SDePER are summarized in [this page](https://sdeper.readthedocs.io/en/latest/vignettes1.html). All related materials can be found in the [Analysis repository](https://github.com/az7jh2/SDePER_Analysis).
 
 ## Citation
 

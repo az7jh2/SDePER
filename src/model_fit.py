@@ -12,7 +12,6 @@ currently we use a two-stage implement to fit GLRM
 
 
 import numpy as np
-import networkx as nx
 from time import time
 from local_fit_numba import update_theta, update_sigma2
 from admm_fit import one_admm_fit
@@ -229,7 +228,7 @@ def estimating_gamma_g(data, hybrid_version=True, opt_method='L-BFGS-B', verbose
 
 
 
-def fit_model_two_stage(data, G, gamma_g=None, lambda_r=None, weight_threshold=1e-3, lambda_g=None, global_optimize=False, hybrid_version=True, opt_method='L-BFGS-B', verbose=False, use_cache=True, diagnosis=False):
+def fit_model_two_stage(data, gamma_g=None, lambda_r=None, weight_threshold=1e-3, lambda_g=None, global_optimize=False, hybrid_version=True, opt_method='L-BFGS-B', verbose=False, use_cache=True, diagnosis=False):
     """
     fit Graph Laplacian Regularized Stratified Model (GLRM) in a two-stage way
     
@@ -246,8 +245,6 @@ def fit_model_two_stage(data, G, gamma_g=None, lambda_r=None, weight_threshold=1
             gene_names: a list of string of gene symbols. Only keep actually used marker genes.\n
             celltype_names: a list of string of celltype names.\n
             initial_guess: initial guess of cell-type proportions of spatial spots.
-    G : built graph object from networks module
-        used for constructing Laplacian Matrix
     gamma_g : 1-D numpy array
         gene-specific platform effect for all genes.
     lambda_r : float
@@ -398,20 +395,27 @@ def fit_model_two_stage(data, G, gamma_g=None, lambda_r=None, weight_threshold=1
         
         # considering Laplacian Constrain
         print(f'specified hyper-parameter for Graph Laplacian Constrain is: {lambda_g}')
+        
+        # manually calculate Laplacian matrix L = D - W
+        def calcLaplacian(W):
+            # consistent with nx.laplacian_matrix(G), which return a SciPy sparse matrix
+            deg = W.sum(axis=1)  # degree (row-sum of weights)
+            D   = np.diag(deg)
+            return D - W  # dense Laplacian
+        
+        # transform it to a scipy sparse matrix to be consistent with Laplacian Matrix derived from graph object
+        L = sparse.csr_matrix(calcLaplacian(data['A']))
     
         if isinstance(lambda_g, list):
             print(f'hyper-parameter for Graph Laplacian Constrain: use cross-validation to find the optimal value from {len(lambda_g)} candidates...')
-            lambda_g = cv_find_lambda_g(data, G, theta, e_alpha, theta_mask, gamma_g, sigma2, lambda_g, hybrid_version=hybrid_version, opt_method=opt_method, hv_x=z_hv, hv_log_p=log_p_hv, use_admm=True, use_likelihood=True, use_cache=use_cache, diagnosis=diagnosis)
+            # NOTE to use deep copy of Laplacian matrix to avoid modify it unexpectedly
+            lambda_g = cv_find_lambda_g(data, L.copy(), theta, e_alpha, theta_mask, gamma_g, sigma2, lambda_g, hybrid_version=hybrid_version, opt_method=opt_method, hv_x=z_hv, hv_log_p=log_p_hv, use_admm=True, use_likelihood=True, use_cache=use_cache, diagnosis=diagnosis)
     
-        # update edge weight in Graph, otherwise edge will have weight 1, then calculate the Laplacian Matrix
-        for _, _, e in G.edges(data=True):
-            e["weight"] = lambda_g
-        # calculate Laplacian, result is a SciPy sparse matrix
-        L = nx.laplacian_matrix(G)
-        
+        # UPDATE: multiple the hyperparameter with Laplacian matrix get 𝜆L
+        lambda_gL = L * lambda_g
         
         # stage 2 ADMM iterations
-        result = one_admm_fit(data, L, theta, e_alpha, gamma_g, sigma2,
+        result = one_admm_fit(data, lambda_gL, theta, e_alpha, gamma_g, sigma2,
                               lambda_r=0, lasso_weight=None,
                               hv_x=z_hv, hv_log_p=log_p_hv, theta_mask=theta_mask,
                               opt_method=opt_method, global_optimize=global_optimize,
