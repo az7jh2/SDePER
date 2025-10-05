@@ -89,14 +89,6 @@ gamma = 4e-3
 
 
 """
-define number of digits used for round floats in fast computing the heavy-tail probabilities
-"""
-mu_digits = 3
-sigma2_digits = 2
-
-
-
-"""
 define eps in optmization for theta and sigma2 (default 1e-08)
 """
 theta_eps = 1e-8

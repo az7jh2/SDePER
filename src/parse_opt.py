@@ -285,7 +285,7 @@ def parseOpt():
             tmp_file = os.path.join(input_path, val)
             if not os.path.isfile(tmp_file):
                 # the input is not a valid existing filename
-                raise Exception('Invalid input file `{tmp_file}` for adjacency matrix of spatial transcriptomic data!')
+                raise Exception(f'Invalid input file `{tmp_file}` for adjacency matrix of spatial transcriptomic data!')
             # Use the `realpath` function to get the real absolute path
             paramdict['A_file'] = os.path.realpath(tmp_file)
             continue
@@ -296,14 +296,14 @@ def parseOpt():
                 paramdict['n_cores'] = int(float(val))
                 
                 if paramdict['n_cores'] > os.cpu_count():
-                    print(f'WARNING: user set using `{paramdict["n_cores"]}` CPU cores but system only has `{os.cpu_count()}` cores. Reset CPU cores to `{os.cpu_count()}`')
+                    print(f'[WARNING] user set using `{paramdict["n_cores"]}` CPU cores but system only has `{os.cpu_count()}` cores. Reset CPU cores to `{os.cpu_count()}`')
                     paramdict['n_cores'] = os.cpu_count()
                 
                 if paramdict['n_cores'] < 1:
-                    print(f'WARNING: invalid option value `{paramdict["n_cores"]}` for CPU cores! Please use integer which >= 1. Currently CPU cores is set to be default value `{default_paramdict["n_cores"]}`')
+                    print(f'[WARNING] invalid option value `{paramdict["n_cores"]}` for CPU cores! Please use integer which >= 1. Currently CPU cores is set to be default value `{default_paramdict["n_cores"]}`')
                     paramdict['n_cores'] = default_paramdict["n_cores"]
             except:
-                print(f'WARNING: unrecognized option value `{val}` for CPU cores! Please use numeric value. Currently CPU cores is set to be default value `{default_paramdict["n_cores"]}`!')
+                print(f'[WARNING] unrecognized option value `{val}` for CPU cores! Please use numeric value. Currently CPU cores is set to be default value `{default_paramdict["n_cores"]}`!')
             continue
         
     
@@ -316,10 +316,10 @@ def parseOpt():
                     paramdict['lambda_r'] = float(val)
                     
                     if paramdict['lambda_r'] < 0:
-                        print(f'WARNING: negative option value `{paramdict["lambda_r"]}` for lambda_r! Please use non-negative value. Currently lambda_r is set to be default value `{default_paramdict["lambda_r"]}`!')
+                        print(f'[WARNING] negative option value `{paramdict["lambda_r"]}` for lambda_r! Please use non-negative value. Currently lambda_r is set to be default value `{default_paramdict["lambda_r"]}`!')
                         paramdict['lambda_r'] = default_paramdict["lambda_r"]
                 except:
-                    print(f'WARNING: unrecognized option value `{val}` for lambda_r! Please use numeric value or `none`. Currently lambda_r is set to be default value `{default_paramdict["lambda_r"]}`!')
+                    print(f'[WARNING] unrecognized option value `{val}` for lambda_r! Please use numeric value or `none`. Currently lambda_r is set to be default value `{default_paramdict["lambda_r"]}`!')
                 continue
             
             
@@ -328,10 +328,10 @@ def parseOpt():
                 paramdict['lambda_r_range_min'] = float(val)
                 
                 if paramdict['lambda_r_range_min'] < 0:
-                    print(f'WARNING: negative option value `{paramdict["lambda_r_range_min"]}` for lambda_r_range_min! Please use non-negative value. Currently lambda_r_range_min is set to be value `0`!')
+                    print(f'[WARNING] negative option value `{paramdict["lambda_r_range_min"]}` for lambda_r_range_min! Please use non-negative value. Currently lambda_r_range_min is set to be value `0`!')
                     paramdict['lambda_r_range_min'] = 0
             except:
-                print(f'WARNING: unrecognized option value `{val}` for lambda_r_range_min! Please use numeric value. Currently lambda_r_range_min is set to be default value `{default_paramdict["lambda_r_range_min"]}`!')
+                print(f'[WARNING] unrecognized option value `{val}` for lambda_r_range_min! Please use numeric value. Currently lambda_r_range_min is set to be default value `{default_paramdict["lambda_r_range_min"]}`!')
             continue
         
         
@@ -340,7 +340,7 @@ def parseOpt():
                 paramdict['lambda_r_range_max'] = float(val)
                 # checking max value in the final check
             except:
-                print(f'WARNING: unrecognized option value `{val}` for lambda_r_range_max! Please use numeric value. Currently lambda_r_range_max is set to be default value `{default_paramdict["lambda_r_range_max"]}`!')
+                print(f'[WARNING] unrecognized option value `{val}` for lambda_r_range_max! Please use numeric value. Currently lambda_r_range_max is set to be default value `{default_paramdict["lambda_r_range_max"]}`!')
             continue
         
         
@@ -349,10 +349,10 @@ def parseOpt():
                 paramdict['lambda_r_range_k'] = int(float(val))
                 
                 if paramdict['lambda_r_range_k'] < 1:
-                    print(f'WARNING: option value `{paramdict["lambda_r_range_k"]}` for lambda_r_range_k < 1! Please use integer which >= 1. Currently lambda_r_range_k is set to be value `1`!')
+                    print(f'[WARNING] option value `{paramdict["lambda_r_range_k"]}` for lambda_r_range_k < 1! Please use integer which >= 1. Currently lambda_r_range_k is set to be value `1`!')
                     paramdict['lambda_r_range_k'] = 1
             except:
-                print(f'WARNING: unrecognized option value `{val}` for lambda_r_range_k! Please use numeric value. Currently lambda_r_range_k is set to be default value `{default_paramdict["lambda_r_range_k"]}`!')
+                print(f'[WARNING] unrecognized option value `{val}` for lambda_r_range_k! Please use numeric value. Currently lambda_r_range_k is set to be default value `{default_paramdict["lambda_r_range_k"]}`!')
             continue
     
         
@@ -365,10 +365,10 @@ def parseOpt():
                     paramdict['lambda_g'] = float(val)
                     
                     if paramdict['lambda_g'] < 0:
-                        print(f'WARNING: negative option value `{paramdict["lambda_g"]}` for lambda_g! Please use non-negative value. Currently lambda_g is set to be default value `{default_paramdict["lambda_g"]}`!')
+                        print(f'[WARNING] negative option value `{paramdict["lambda_g"]}` for lambda_g! Please use non-negative value. Currently lambda_g is set to be default value `{default_paramdict["lambda_g"]}`!')
                         paramdict['lambda_g'] = default_paramdict["lambda_g"]
                 except:
-                    print(f'WARNING: unrecognized option value `{val}` for lambda_g! Please use numeric value or `none`. Currently lambda_g is set to be default value `None`!')
+                    print(f'[WARNING] unrecognized option value `{val}` for lambda_g! Please use numeric value or `none`. Currently lambda_g is set to be default value `None`!')
                 continue
         
         
@@ -377,10 +377,10 @@ def parseOpt():
                 paramdict['lambda_g_range_min'] = float(val)
                 
                 if paramdict['lambda_g_range_min'] < 0:
-                    print(f'WARNING: negative option value `{paramdict["lambda_g_range_min"]}` for lambda_g_range_min! Please use non-negative value. Currently lambda_g_range_min is set to be value `0`!')
+                    print(f'[WARNING] negative option value `{paramdict["lambda_g_range_min"]}` for lambda_g_range_min! Please use non-negative value. Currently lambda_g_range_min is set to be value `0`!')
                     paramdict['lambda_g_range_min'] = 0
             except:
-                print(f'WARNING: unrecognized option value `{val}` for lambda_g_range_min! Please use numeric value. Currently lambda_g_range_min is set to be default value `{default_paramdict["lambda_g_range_min"]}`!')
+                print(f'[WARNING] unrecognized option value `{val}` for lambda_g_range_min! Please use numeric value. Currently lambda_g_range_min is set to be default value `{default_paramdict["lambda_g_range_min"]}`!')
             continue
         
         
@@ -389,7 +389,7 @@ def parseOpt():
                 paramdict['lambda_g_range_max'] = float(val)
                 # checking max value in the final check
             except:
-                print(f'WARNING: unrecognized option value `{val}` for lambda_g_range_max! Please use numeric value. Currently lambda_g_range_max is set to be default value `{default_paramdict["lambda_g_range_max"]}`!')
+                print(f'[WARNING] unrecognized option value `{val}` for lambda_g_range_max! Please use numeric value. Currently lambda_g_range_max is set to be default value `{default_paramdict["lambda_g_range_max"]}`!')
             continue
         
         
@@ -398,10 +398,10 @@ def parseOpt():
                 paramdict['lambda_g_range_k'] = int(float(val))
                 
                 if paramdict['lambda_g_range_k'] < 1:
-                    print(f'WARNING: option value `{paramdict["lambda_g_range_k"]}` for lambda_g_range_k < 1! Please use integer which >= 1. Currently lambda_g_range_k is set to be value `1`!')
+                    print(f'[WARNING] option value `{paramdict["lambda_g_range_k"]}` for lambda_g_range_k < 1! Please use integer which >= 1. Currently lambda_g_range_k is set to be value `1`!')
                     paramdict['lambda_g_range_k'] = 1
             except:
-                print(f'WARNING: unrecognized option value `{val}` for lambda_g_range_k! Please use numeric value. Currently lambda_g_range_k is set to be default value `{default_paramdict["lambda_g_range_k"]}`!')
+                print(f'[WARNING] unrecognized option value `{val}` for lambda_g_range_k! Please use numeric value. Currently lambda_g_range_k is set to be default value `{default_paramdict["lambda_g_range_k"]}`!')
             continue
         
         
@@ -411,7 +411,7 @@ def parseOpt():
             elif val.casefold() == 'false'.casefold():
                 paramdict['use_cvae'] = False
             else:
-                print(f'WARNING: unrecognized option value `{val}` for use_cvae! Please use string of true or false. Currently use_cvae is set to be default value `{default_paramdict["use_cvae"]}`!')
+                print(f'[WARNING] unrecognized option value `{val}` for use_cvae! Please use string of true or false. Currently use_cvae is set to be default value `{default_paramdict["use_cvae"]}`!')
             continue
         
         
@@ -420,10 +420,10 @@ def parseOpt():
                 paramdict['threshold'] = float(val)
                 
                 if paramdict['threshold'] < 0:
-                    print(f'WARNING: negative option value `{paramdict["threshold"]}` for thoreshold! Please use non-negative value. Currently threshold is set to be default value `0`!')
+                    print(f'[WARNING] negative option value `{paramdict["threshold"]}` for thoreshold! Please use non-negative value. Currently threshold is set to be default value `0`!')
                     paramdict['threshold'] = 0
             except:
-                print(f'WARNING: unrecognized option value `{val}` for threshold! Please use numeric value. Currently threshold is set to be default value `{default_paramdict["threshold"]}`!')
+                print(f'[WARNING] unrecognized option value `{val}` for threshold! Please use numeric value. Currently threshold is set to be default value `{default_paramdict["threshold"]}`!')
             continue
         
         
@@ -432,10 +432,10 @@ def parseOpt():
                 paramdict['n_hv_gene'] = int(float(val))
                 
                 if paramdict['n_hv_gene'] < 0:
-                    print(f'WARNING: negative option value `{paramdict["n_hv_gene"]}` for n_hv_gene! Please use non-negative integer. Currently n_hv_gene is set to be default value `{default_paramdict["n_hv_gene"]}`!')
+                    print(f'[WARNING] negative option value `{paramdict["n_hv_gene"]}` for n_hv_gene! Please use non-negative integer. Currently n_hv_gene is set to be default value `{default_paramdict["n_hv_gene"]}`!')
                     paramdict['n_hv_gene'] = default_paramdict["n_hv_gene"]
             except:
-                print(f'WARNING: unrecognized option value `{val}` for n_hv_gene! Please use numeric value. Currently n_hv_gene is set to be default value `{default_paramdict["n_hv_gene"]}`!')
+                print(f'[WARNING] unrecognized option value `{val}` for n_hv_gene! Please use numeric value. Currently n_hv_gene is set to be default value `{default_paramdict["n_hv_gene"]}`!')
             continue
         
         
@@ -444,10 +444,10 @@ def parseOpt():
                 paramdict['n_marker_per_cmp'] = int(float(val))
                 
                 if paramdict['n_marker_per_cmp'] <= 0:
-                    print(f'WARNING: non-positive option value `{paramdict["n_marker_per_cmp"]}` for n_marker_per_cmp! Please use positve integer. Currently n_marker_per_cmp is set to be default value `{default_paramdict["n_marker_per_cmp"]}`!')
+                    print(f'[WARNING] non-positive option value `{paramdict["n_marker_per_cmp"]}` for n_marker_per_cmp! Please use positve integer. Currently n_marker_per_cmp is set to be default value `{default_paramdict["n_marker_per_cmp"]}`!')
                     paramdict['n_marker_per_cmp'] = default_paramdict["n_marker_per_cmp"]
             except:
-                print(f'WARNING: unrecognized option value `{val}` for n_marker_per_cmp! Please use numeric value. Currently n_marker_per_cmp is set to be default value `{default_paramdict["n_marker_per_cmp"]}`!')
+                print(f'[WARNING] unrecognized option value `{val}` for n_marker_per_cmp! Please use numeric value. Currently n_marker_per_cmp is set to be default value `{default_paramdict["n_marker_per_cmp"]}`!')
             continue
         
         
@@ -456,10 +456,10 @@ def parseOpt():
                 paramdict['n_pseudo_spot'] = int(float(val))
                 
                 if paramdict['n_pseudo_spot'] < 0:
-                    print(f'WARNING: negative option value `{paramdict["n_pseudo_spot"]}` for n_pseudo_spot! Please use non-negative integer. Currently n_pseudo_spot is set to be default value `{default_paramdict["n_pseudo_spot"]}`!')
+                    print(f'[WARNING] negative option value `{paramdict["n_pseudo_spot"]}` for n_pseudo_spot! Please use non-negative integer. Currently n_pseudo_spot is set to be default value `{default_paramdict["n_pseudo_spot"]}`!')
                     paramdict['n_pseudo_spot'] = default_paramdict["n_pseudo_spot"]
             except:
-                print(f'WARNING: unrecognized option value `{val}` for n_pseudo_spot! Please use numeric value. Currently n_pseudo_spot is set to be default value `{default_paramdict["n_pseudo_spot"]}`!')
+                print(f'[WARNING] unrecognized option value `{val}` for n_pseudo_spot! Please use numeric value. Currently n_pseudo_spot is set to be default value `{default_paramdict["n_pseudo_spot"]}`!')
             continue
         
         
@@ -468,10 +468,10 @@ def parseOpt():
                 paramdict['pseudo_spot_min_cell'] = int(float(val))
                 
                 if paramdict['pseudo_spot_min_cell'] < 2:
-                    print(f'WARNING: invalid option value `{paramdict["pseudo_spot_min_cell"]}` for pseudo_spot_min_cell! Please use integer which >= 2. Currently pseudo_spot_min_cell is set to be value `2`!')
+                    print(f'[WARNING] invalid option value `{paramdict["pseudo_spot_min_cell"]}` for pseudo_spot_min_cell! Please use integer which >= 2. Currently pseudo_spot_min_cell is set to be value `2`!')
                     paramdict['pseudo_spot_min_cell'] = 2
             except:
-                print(f'WARNING: unrecognized option value `{val}` for pseudo_spot_min_cell! Please use numeric value. Currently pseudo_spot_min_cell is set to be default value `{default_paramdict["pseudo_spot_min_cell"]}`!')
+                print(f'[WARNING] unrecognized option value `{val}` for pseudo_spot_min_cell! Please use numeric value. Currently pseudo_spot_min_cell is set to be default value `{default_paramdict["pseudo_spot_min_cell"]}`!')
             continue
         
         
@@ -480,7 +480,7 @@ def parseOpt():
                 paramdict['pseudo_spot_max_cell'] = int(float(val))
                 # checking pseudo_spot_max_cell leaves to the final check
             except:
-                print(f'WARNING: unrecognized option value `{val}` for pseudo_spot_max_cell! Please use numeric value. Currently pseudo_spot_max_cell is set to be default value `{default_paramdict["pseudo_spot_max_cell"]}`!')
+                print(f'[WARNING] unrecognized option value `{val}` for pseudo_spot_max_cell! Please use numeric value. Currently pseudo_spot_max_cell is set to be default value `{default_paramdict["pseudo_spot_max_cell"]}`!')
             continue
         
         
@@ -489,10 +489,10 @@ def parseOpt():
                 paramdict['seq_depth_scaler'] = int(float(val))
                 
                 if paramdict['seq_depth_scaler'] <= 0:
-                    print(f'WARNING: non-positive option value `{paramdict["seq_depth_scaler"]}` for seq_depth_scaler! Please use positve integer. Currently seq_depth_scaler is set to be default value `{default_paramdict["seq_depth_scaler"]}`!')
+                    print(f'[WARNING] non-positive option value `{paramdict["seq_depth_scaler"]}` for seq_depth_scaler! Please use positve integer. Currently seq_depth_scaler is set to be default value `{default_paramdict["seq_depth_scaler"]}`!')
                     paramdict['seq_depth_scaler'] = default_paramdict["seq_depth_scaler"]
             except:
-                print(f'WARNING: unrecognized option value `{val}` for seq_depth_scaler! Please use numeric value. Currently seq_depth_scaler is set to be default value `{default_paramdict["seq_depth_scaler"]}`!')
+                print(f'[WARNING] unrecognized option value `{val}` for seq_depth_scaler! Please use numeric value. Currently seq_depth_scaler is set to be default value `{default_paramdict["seq_depth_scaler"]}`!')
             continue
         
         
@@ -501,10 +501,10 @@ def parseOpt():
                 paramdict['cvae_input_scaler'] = int(float(val))
                 
                 if paramdict['cvae_input_scaler'] <= 0:
-                    print(f'WARNING: non-positive option value `{paramdict["cvae_input_scaler"]}` for cvae_input_scaler! Please use positve integer. Currently cvae_input_scaler is set to be default value `{default_paramdict["cvae_input_scaler"]}`!')
+                    print(f'[WARNING] non-positive option value `{paramdict["cvae_input_scaler"]}` for cvae_input_scaler! Please use positve integer. Currently cvae_input_scaler is set to be default value `{default_paramdict["cvae_input_scaler"]}`!')
                     paramdict['cvae_input_scaler'] = default_paramdict["cvae_input_scaler"]
             except:
-                print(f'WARNING: unrecognized option value `{val}` for cvae_input_scaler! Please use numeric value. Currently cvae_input_scaler is set to be default value `{default_paramdict["cvae_input_scaler"]}`!')
+                print(f'[WARNING] unrecognized option value `{val}` for cvae_input_scaler! Please use numeric value. Currently cvae_input_scaler is set to be default value `{default_paramdict["cvae_input_scaler"]}`!')
             continue
         
         
@@ -513,10 +513,10 @@ def parseOpt():
                 paramdict['cvae_init_lr'] = float(val)
                 
                 if paramdict['cvae_init_lr'] <= 0:
-                    print(f'WARNING: non-positive option value `{paramdict["cvae_init_lr"]}` for cvae_init_lr! Please use positve value. Currently cvae_init_lr is set to be default value `{default_paramdict["cvae_init_lr"]}`!')
+                    print(f'[WARNING] non-positive option value `{paramdict["cvae_init_lr"]}` for cvae_init_lr! Please use positve value. Currently cvae_init_lr is set to be default value `{default_paramdict["cvae_init_lr"]}`!')
                     paramdict['cvae_init_lr'] = default_paramdict["cvae_init_lr"]
             except:
-                print(f'WARNING: unrecognized option value `{val}` for cvae_init_lr! Please use numeric value. Currently cvae_init_lr is set to be default value `{default_paramdict["cvae_init_lr"]}`!')
+                print(f'[WARNING] unrecognized option value `{val}` for cvae_init_lr! Please use numeric value. Currently cvae_init_lr is set to be default value `{default_paramdict["cvae_init_lr"]}`!')
             continue
         
         
@@ -525,10 +525,10 @@ def parseOpt():
                 paramdict['num_hidden_layer'] = int(float(val))
                 
                 if paramdict['num_hidden_layer'] < 1:
-                    print(f'WARNING: invalid option value `{paramdict["num_hidden_layer"]}` for num_hidden_layer! Please use integer which >= 1. Currently num_hidden_layer is set to be value `1`!')
+                    print(f'[WARNING] invalid option value `{paramdict["num_hidden_layer"]}` for num_hidden_layer! Please use integer which >= 1. Currently num_hidden_layer is set to be value `1`!')
                     paramdict['num_hidden_layer'] = 1
             except:
-                print(f'WARNING: unrecognized option value `{val}` for num_hidden_layer! Please use numeric value. Currently num_hidden_layer is set to be default value `{default_paramdict["num_hidden_layer"]}`!')
+                print(f'[WARNING] unrecognized option value `{val}` for num_hidden_layer! Please use numeric value. Currently num_hidden_layer is set to be default value `{default_paramdict["num_hidden_layer"]}`!')
             continue
         
         
@@ -538,7 +538,7 @@ def parseOpt():
             elif val.casefold() == 'false'.casefold():
                 paramdict['use_batch_norm'] = False
             else:
-                print(f'WARNING: unrecognized option value `{val}` for use_batch_norm! Please use string of true or false. Currently use_batch_norm is set to be default value `{default_paramdict["use_batch_norm"]}`!')
+                print(f'[WARNING] unrecognized option value `{val}` for use_batch_norm! Please use string of true or false. Currently use_batch_norm is set to be default value `{default_paramdict["use_batch_norm"]}`!')
             continue
         
         
@@ -547,10 +547,10 @@ def parseOpt():
                 paramdict['cvae_train_epoch'] = int(float(val))
                 
                 if paramdict['cvae_train_epoch'] < 30:
-                    print(f'WARNING: invalid option value `{paramdict["cvae_train_epoch"]}` for cvae_train_epoch! Please use integer which >= 30. Currently cvae_train_epoch is set to be value `30`!')
+                    print(f'[WARNING] invalid option value `{paramdict["cvae_train_epoch"]}` for cvae_train_epoch! Please use integer which >= 30. Currently cvae_train_epoch is set to be value `30`!')
                     paramdict['cvae_train_epoch'] = 30
             except:
-                print(f'WARNING: unrecognized option value `{val}` for cvae_train_epoch! Please use numeric value. Currently cvae_train_epoch is set to be default value `{default_paramdict["cvae_train_epoch"]}`!')
+                print(f'[WARNING] unrecognized option value `{val}` for cvae_train_epoch! Please use numeric value. Currently cvae_train_epoch is set to be default value `{default_paramdict["cvae_train_epoch"]}`!')
             continue
         
         
@@ -560,7 +560,7 @@ def parseOpt():
             elif val.casefold() == 'false'.casefold():
                 paramdict['use_spatial_pseudo'] = False
             else:
-                print(f'WARNING: unrecognized option value `{val}` for use_spatial_pseudo! Please use string of true or false. Currently use_spatial_pseudo is set to be default value `{default_paramdict["use_spatial_pseudo"]}`!')
+                print(f'[WARNING] unrecognized option value `{val}` for use_spatial_pseudo! Please use string of true or false. Currently use_spatial_pseudo is set to be default value `{default_paramdict["use_spatial_pseudo"]}`!')
             continue
         
         
@@ -570,7 +570,7 @@ def parseOpt():
             elif val.casefold() == 'false'.casefold():
                 paramdict['redo_de'] = False
             else:
-                print(f'WARNING: unrecognized option value `{val}` for redo_de! Please use string of true or false. Currently redo_de is set to be default value `{default_paramdict["redo_de"]}`!')
+                print(f'[WARNING] unrecognized option value `{val}` for redo_de! Please use string of true or false. Currently redo_de is set to be default value `{default_paramdict["redo_de"]}`!')
             continue
         
         
@@ -578,7 +578,7 @@ def parseOpt():
             try:
                 paramdict['seed'] = int(float(val))
             except:
-                print(f'WARNING: unrecognized option value `{val}` for seed! Please use numeric value. Currently seed is set to be default value `{default_paramdict["seed"]}`!')
+                print(f'[WARNING] unrecognized option value `{val}` for seed! Please use numeric value. Currently seed is set to be default value `{default_paramdict["seed"]}`!')
             continue
         
         
@@ -588,7 +588,7 @@ def parseOpt():
             elif val.casefold() == 'false'.casefold():
                 paramdict['diagnosis'] = False
             else:
-                print(f'WARNING: unrecognized option value `{val}` for diagnosis! Please use string of true or false. Currently verbose is set to be default value `{default_paramdict["diagnosis"]}`!')
+                print(f'[WARNING] unrecognized option value `{val}` for diagnosis! Please use string of true or false. Currently verbose is set to be default value `{default_paramdict["diagnosis"]}`!')
             continue
         
         
@@ -598,7 +598,7 @@ def parseOpt():
             elif val.casefold() == 'false'.casefold():
                 paramdict['verbose'] = False
             else:
-                print(f'WARNING: unrecognized option value `{val}` for verbose! Please use string of true or false. Currently verbose is set to be default value `{default_paramdict["verbose"]}`!')
+                print(f'[WARNING] unrecognized option value `{val}` for verbose! Please use string of true or false. Currently verbose is set to be default value `{default_paramdict["verbose"]}`!')
             continue
         
         
@@ -608,7 +608,7 @@ def parseOpt():
             elif val.casefold() == 'false'.casefold():
                 paramdict['use_fdr'] = False
             else:
-                print(f'WARNING: unrecognized option value `{val}` for use_fdr! Please use string of true or false. Currently use_fdr is set to be default value `{default_paramdict["use_fdr"]}`!')
+                print(f'[WARNING] unrecognized option value `{val}` for use_fdr! Please use string of true or false. Currently use_fdr is set to be default value `{default_paramdict["use_fdr"]}`!')
             continue
         
         
@@ -617,10 +617,10 @@ def parseOpt():
                 paramdict['p_val_cutoff'] = float(val)
                 
                 if paramdict['p_val_cutoff'] < 0:
-                    print(f'WARNING: negative option value `{paramdict["p_val_cutoff"]}` for p_val_cutoff! Please use non-negative value. Currently p_val_cutoff is set to be default value `{default_paramdict["p_val_cutoff"]}`!')
+                    print(f'[WARNING] negative option value `{paramdict["p_val_cutoff"]}` for p_val_cutoff! Please use non-negative value. Currently p_val_cutoff is set to be default value `{default_paramdict["p_val_cutoff"]}`!')
                     paramdict['p_val_cutoff'] = default_paramdict["p_val_cutoff"]
             except:
-                print(f'WARNING: unrecognized option value `{val}` for p_val_cutoff! Please use numeric value. Currently p_val_cutoff is set to be default value `{default_paramdict["p_val_cutoff"]}`!')
+                print(f'[WARNING] unrecognized option value `{val}` for p_val_cutoff! Please use numeric value. Currently p_val_cutoff is set to be default value `{default_paramdict["p_val_cutoff"]}`!')
             continue
         
         
@@ -629,10 +629,10 @@ def parseOpt():
                 paramdict['fc_cutoff'] = float(val)
                 
                 if paramdict['fc_cutoff'] < 1:
-                    print(f'WARNING: option value `{paramdict["fc_cutoff"]}` for fc_cutoff < 1! Please use a value >= 1. Currently fc_cutoff is set to be value `1`!')
+                    print(f'[WARNING] option value `{paramdict["fc_cutoff"]}` for fc_cutoff < 1! Please use a value >= 1. Currently fc_cutoff is set to be value `1`!')
                     paramdict['fc_cutoff'] = 1
             except:
-                print(f'WARNING: unrecognized option value `{val}` for fc_cutoff! Please use numeric value. Currently fc_cutoff is set to be default value `{default_paramdict["fc_cutoff"]}`!')
+                print(f'[WARNING] unrecognized option value `{val}` for fc_cutoff! Please use numeric value. Currently fc_cutoff is set to be default value `{default_paramdict["fc_cutoff"]}`!')
             continue
         
         
@@ -641,10 +641,10 @@ def parseOpt():
                 paramdict['pct1_cutoff'] = float(val)
                 
                 if paramdict['pct1_cutoff'] > 1:
-                    print(f'WARNING: option value `{paramdict["pct1_cutoff"]}` for pct1_cutoff > 1! Please use a value <= 1. Currently pct1_cutoff is set to be default value `{default_paramdict["pct1_cutoff"]}`!')
+                    print(f'[WARNING] option value `{paramdict["pct1_cutoff"]}` for pct1_cutoff > 1! Please use a value <= 1. Currently pct1_cutoff is set to be default value `{default_paramdict["pct1_cutoff"]}`!')
                     paramdict['pct1_cutoff'] = default_paramdict["pct1_cutoff"]
             except:
-                print(f'WARNING: unrecognized option value `{val}` for pct1_cutoff! Please use numeric value. Currently pct1_cutoff is set to be default value `{default_paramdict["pct1_cutoff"]}`!')
+                print(f'[WARNING] unrecognized option value `{val}` for pct1_cutoff! Please use numeric value. Currently pct1_cutoff is set to be default value `{default_paramdict["pct1_cutoff"]}`!')
             continue
         
         
@@ -653,10 +653,10 @@ def parseOpt():
                 paramdict['pct2_cutoff'] = float(val)
                 
                 if paramdict['pct2_cutoff'] < 0:
-                    print(f'WARNING: option value `{paramdict["pct2_cutoff"]}` for pct2_cutoff < 0! Please use a value >= 0. Currently pct2_cutoff is set to be default value `{default_paramdict["pct2_cutoff"]}`!')
+                    print(f'[WARNING] option value `{paramdict["pct2_cutoff"]}` for pct2_cutoff < 0! Please use a value >= 0. Currently pct2_cutoff is set to be default value `{default_paramdict["pct2_cutoff"]}`!')
                     paramdict['pct2_cutoff'] = default_paramdict["pct2_cutoff"]
             except:
-                print(f'WARNING: unrecognized option value `{val}` for pct2_cutoff! Please use numeric value. Currently pct2_cutoff is set to be default value `{default_paramdict["pct2_cutoff"]}`!')
+                print(f'[WARNING] unrecognized option value `{val}` for pct2_cutoff! Please use numeric value. Currently pct2_cutoff is set to be default value `{default_paramdict["pct2_cutoff"]}`!')
             continue
          
         
@@ -666,7 +666,7 @@ def parseOpt():
             elif val.casefold() == 'false'.casefold():
                 paramdict['sortby_fc'] = False
             else:
-                print(f'WARNING: unrecognized option value `{val}` for sortby_fc! Please use string of true or false. Currently sortby_fc is set to be default value `{default_paramdict["sortby_fc"]}`!')
+                print(f'[WARNING] unrecognized option value `{val}` for sortby_fc! Please use string of true or false. Currently sortby_fc is set to be default value `{default_paramdict["sortby_fc"]}`!')
             continue
         
         
@@ -676,7 +676,7 @@ def parseOpt():
             elif val.casefold() == 'false'.casefold():
                 paramdict['filter_cell'] = False
             else:
-                print(f'WARNING: unrecognized option value `{val}` for filter_cell! Please use string of true or false. Currently filter_cell is set to be default value `{default_paramdict["filter_cell"]}`!')
+                print(f'[WARNING] unrecognized option value `{val}` for filter_cell! Please use string of true or false. Currently filter_cell is set to be default value `{default_paramdict["filter_cell"]}`!')
             continue
         
         
@@ -686,7 +686,7 @@ def parseOpt():
             elif val.casefold() == 'false'.casefold():
                 paramdict['filter_gene'] = False
             else:
-                print(f'WARNING: unrecognized option value `{val}` for filter_gene! Please use string of true or false. Currently filter_gene is set to be default value `{default_paramdict["filter_gene"]}`!')
+                print(f'[WARNING] unrecognized option value `{val}` for filter_gene! Please use string of true or false. Currently filter_gene is set to be default value `{default_paramdict["filter_gene"]}`!')
             continue
         
         
@@ -696,7 +696,7 @@ def parseOpt():
             elif val.casefold() == 'false'.casefold():
                 paramdict['use_imputation'] = False
             else:
-                print(f'WARNING: unrecognized option value `{val}` for use_imputation! Please use string of true or false. Currently use_imputation is set to be default value `{default_paramdict["use_imputation"]}`!')
+                print(f'[WARNING] unrecognized option value `{val}` for use_imputation! Please use string of true or false. Currently use_imputation is set to be default value `{default_paramdict["use_imputation"]}`!')
             continue
         
         
@@ -705,10 +705,10 @@ def parseOpt():
                 paramdict['diameter'] = int(float(val))
                 
                 if paramdict['diameter'] <= 0:
-                    print(f'WARNING: non-positive option value `{paramdict["diameter"]}` for diameter! Please use positive integer. Currently diameter is set to be default value `{default_paramdict["diameter"]}`!')
+                    print(f'[WARNING] non-positive option value `{paramdict["diameter"]}` for diameter! Please use positive integer. Currently diameter is set to be default value `{default_paramdict["diameter"]}`!')
                     paramdict['diameter'] = default_paramdict['diameter']
             except:
-                print(f'WARNING: unrecognized option value `{val}` for diameter! Please use numeric value. Currently diameter is set to be default value `{default_paramdict["diameter"]}`!')
+                print(f'[WARNING] unrecognized option value `{val}` for diameter! Please use numeric value. Currently diameter is set to be default value `{default_paramdict["diameter"]}`!')
             continue
 
         
@@ -722,14 +722,14 @@ def parseOpt():
                     tmp_val = int(float(x.strip()))
                     
                     if tmp_val <= 0:
-                        print(f'WARNING: non-positive option value `{tmp_val}` for impute_diameter! Please use positive integer. Currently this value will be ignored!')
+                        print(f'[WARNING] non-positive option value `{tmp_val}` for impute_diameter! Please use positive integer. Currently this value will be ignored!')
                     else:
                         tmp_list.append(tmp_val)
                 except:
-                    print(f'WARNING: unrecognized option value `{x.strip()}` for impute_diameter! Please use numeric value. Currently this value will be ignored!')
+                    print(f'[WARNING] unrecognized option value `{x.strip()}` for impute_diameter! Please use numeric value. Currently this value will be ignored!')
                     
             if len(tmp_list) == 0:
-                print(f'WARNING: no valid value can be extracted from option value `{val}` for impute_diameter! Please use one numeric value or an array of numeric values separated by ",". Currently impute_diameter is set to be default value `{",".join([str(x) for x in default_paramdict["impute_diameter"]])}`!')
+                print(f'[WARNING] no valid value can be extracted from option value `{val}` for impute_diameter! Please use one numeric value or an array of numeric values separated by ",". Currently impute_diameter is set to be default value `{",".join([str(x) for x in default_paramdict["impute_diameter"]])}`!')
             else:
                 paramdict['impute_stepsize'] = tmp_list
         
@@ -741,10 +741,10 @@ def parseOpt():
                 paramdict['hole_min_spots'] = int(float(val))
                 
                 if paramdict['hole_min_spots'] < 0:
-                    print(f'WARNING: negative option value `{paramdict["hole_min_spots"]}` for hole_min_spots! Please use non-negative integer. Currently hole_min_spots is set to be default value `{default_paramdict["hole_min_spots"]}`!')
+                    print(f'[WARNING] negative option value `{paramdict["hole_min_spots"]}` for hole_min_spots! Please use non-negative integer. Currently hole_min_spots is set to be default value `{default_paramdict["hole_min_spots"]}`!')
                     paramdict['hole_threshold'] = default_paramdict['hole_min_spots']
             except:
-                print(f'WARNING: unrecognized option value `{val}` for hole_min_spots! Please use numeric value. Currently hole_min_spots is set to be default value `{default_paramdict["hole_min_spots"]}`!')
+                print(f'[WARNING] unrecognized option value `{val}` for hole_min_spots! Please use numeric value. Currently hole_min_spots is set to be default value `{default_paramdict["hole_min_spots"]}`!')
             continue
         
         
@@ -754,7 +754,7 @@ def parseOpt():
             elif val.casefold() == 'false'.casefold():
                 paramdict['preserve_shape'] = False
             else:
-                print(f'WARNING: unrecognized option value `{val}` for preserve_shape! Please use string of true or false. Currently preserve_shape is set to be default value `{default_paramdict["preserve_shape"]}`!')
+                print(f'[WARNING] unrecognized option value `{val}` for preserve_shape! Please use string of true or false. Currently preserve_shape is set to be default value `{default_paramdict["preserve_shape"]}`!')
             continue
     
     
@@ -776,20 +776,20 @@ def parseOpt():
     # check CVAE
     if paramdict['use_cvae']:
         if paramdict['ref_file'] is None or paramdict['ref_celltype_file'] is None:
-            print('WARNING: building CVAE requires reference scRNA-seq data and corresponding cell-type annotation specified! But at least one of them is not specified. use_cvae will be reset to `False`!')
+            print('[WARNING] building CVAE requires reference scRNA-seq data and corresponding cell-type annotation specified! But at least one of them is not specified. use_cvae will be reset to `False`!')
             paramdict['use_cvae'] = False
             
             
     # check number of cells in pseudo-spot
     if paramdict['pseudo_spot_max_cell'] < paramdict['pseudo_spot_min_cell']:
-        print(f'WARNING: option pseudo_spot_max_cell `{paramdict["pseudo_spot_max_cell"]}` < pseudo_spot_min_cell `{paramdict["pseudo_spot_min_cell"]}`. Reset pseudo_spot_max_cell to value `{paramdict["pseudo_spot_min_cell"]+1}`')
+        print(f'[WARNING] option pseudo_spot_max_cell `{paramdict["pseudo_spot_max_cell"]}` < pseudo_spot_min_cell `{paramdict["pseudo_spot_min_cell"]}`. Reset pseudo_spot_max_cell to value `{paramdict["pseudo_spot_min_cell"]+1}`')
         paramdict['pseudo_spot_max_cell'] = paramdict['pseudo_spot_min_cell'] + 1
     
     
     # generate candidates for lambda_r
     if paramdict['lambda_r'] is None:
         if paramdict['lambda_r_range_max'] <= paramdict['lambda_r_range_min']:
-            print(f'WARNING: option lambda_r_range_max `{paramdict["lambda_r_range_max"]}` <= lambda_r_range_min `{paramdict["lambda_r_range_min"]}`. Just use lambda_r_range_min `{paramdict["lambda_r_range_min"]}` for lambda_r!')
+            print(f'[WARNING] option lambda_r_range_max `{paramdict["lambda_r_range_max"]}` <= lambda_r_range_min `{paramdict["lambda_r_range_min"]}`. Just use lambda_r_range_min `{paramdict["lambda_r_range_min"]}` for lambda_r!')
             paramdict['lambda_r'] = paramdict['lambda_r_range_min']
         else:
             paramdict['lambda_r'] = list(np.round(np.geomspace(paramdict['lambda_r_range_min'], paramdict['lambda_r_range_max'], num=paramdict['lambda_r_range_k']), 3))
@@ -802,7 +802,7 @@ def parseOpt():
     # generate candidates for lambda_g
     if paramdict['lambda_g'] is None:
         if paramdict['lambda_g_range_max'] <= paramdict['lambda_g_range_min']:
-            print(f'WARNING: option lambda_g_range_max `{paramdict["lambda_g_range_max"]}` <= lambda_g_range_min `{paramdict["lambda_g_range_min"]}`. Just use lambda_g_range_min `{paramdict["lambda_g_range_min"]}` for lambda_g!')
+            print(f'[WARNING] option lambda_g_range_max `{paramdict["lambda_g_range_max"]}` <= lambda_g_range_min `{paramdict["lambda_g_range_min"]}`. Just use lambda_g_range_min `{paramdict["lambda_g_range_min"]}` for lambda_g!')
             paramdict['lambda_g'] = paramdict['lambda_g_range_min']
         else:
             paramdict['lambda_g'] = list(np.round(np.geomspace(paramdict['lambda_g_range_min'], paramdict['lambda_g_range_max'], num=paramdict['lambda_g_range_k']), 3))
@@ -816,14 +816,14 @@ def parseOpt():
     if paramdict['use_imputation']:
         # 1st: whether location provided
         if paramdict['loc_file'] is None:
-            print('WARNING: perform imputation requires original spot locations, which is not provided. use_imputation will be reset to `False`!')
+            print('[WARNING] perform imputation requires original spot locations, which is not provided. use_imputation will be reset to `False`!')
             paramdict['use_imputation'] = False
         else:
             # 2nd: whether original location of spatial spots provided by x and y coordinates
             tmp_df = pd.read_csv(paramdict['loc_file'], index_col=0)
             # whether column names are x and y
             if not ('x' in tmp_df.columns and 'y' in tmp_df.columns):
-                print('WARNING: the column header of spot location csv file must be "x" and "y"! use_imputation will be reset to `False` since can not infer spot physical locations!')
+                print('[WARNING] the column header of spot location csv file must be "x" and "y"! use_imputation will be reset to `False` since can not infer spot physical locations!')
                 paramdict['use_imputation'] = False
             else:
                 # 3rd: whether diameters in list smaller than the original physical diameter of spatial spots
@@ -832,11 +832,11 @@ def parseOpt():
                     if x < paramdict['diameter']:
                         tmp_list.append(x)
                     else:
-                        print(f'WARNING: specified spot diameter value `{x}` for imputation >= physical diameter of spatial spots `{paramdict["diameter"]}`. Skip it!')
+                        print(f'[WARNING] specified spot diameter value `{x}` for imputation >= physical diameter of spatial spots `{paramdict["diameter"]}`. Skip it!')
                 paramdict['impute_diameter'] = sorted(tmp_list, reverse=True)
                 
                 if len(paramdict['impute_diameter']) == 0:
-                    print('WARNING: no valid values for imputate_diameter after checking! use_imputation will be reset to `False`!')
+                    print('[WARNING] no valid values for imputate_diameter after checking! use_imputation will be reset to `False`!')
                     paramdict['use_imputation'] = False
     
     

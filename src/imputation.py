@@ -686,7 +686,7 @@ def do_imputation(loc_file, theta_file, spatial_file, grid_step=0.5, miss_spot_t
     # Find the intersection of the indices
     common_index = df.index.intersection(theta.index).intersection(X.index)
     if len(common_index) < df.shape[0]:
-        print(f'\nWARNING: {df.shape[0]-len(common_index)} spots removed as lacking of location or cell type proportion information')
+        print(f'\n[WARNING] {df.shape[0]-len(common_index)} spots removed as lacking of location or cell type proportion information')
     
     # Filter the dataframes to keep only the rows with common indices
     df = df.loc[common_index].copy()
@@ -857,10 +857,10 @@ def parseOpt():
                 paramdict['diameter'] = int(float(val))
                 
                 if paramdict['diameter'] <= 0:
-                    print(f'WARNING: non-positive option value `{paramdict["diameter"]}` for diameter! Please use positive integer. Currently diameter is set to be default value `{default_paramdict["diameter"]}`!')
+                    print(f'[WARNING] non-positive option value `{paramdict["diameter"]}` for diameter! Please use positive integer. Currently diameter is set to be default value `{default_paramdict["diameter"]}`!')
                     paramdict['diameter'] = default_paramdict['diameter']
             except:
-                print(f'WARNING: unrecognized option value `{val}` for diameter! Please use numeric value. Currently diameter is set to be default value `{default_paramdict["diameter"]}`!')
+                print(f'[WARNING] unrecognized option value `{val}` for diameter! Please use numeric value. Currently diameter is set to be default value `{default_paramdict["diameter"]}`!')
             continue
 
         
@@ -874,14 +874,14 @@ def parseOpt():
                     tmp_val = int(float(x.strip()))
                     
                     if tmp_val <= 0:
-                        print(f'WARNING: non-positive option value `{tmp_val}` for impute_diameter! Please use positive integer. Currently this value will be ignored!')
+                        print(f'[WARNING] non-positive option value `{tmp_val}` for impute_diameter! Please use positive integer. Currently this value will be ignored!')
                     else:
                         tmp_list.append(tmp_val)
                 except:
-                    print(f'WARNING: unrecognized option value `{x.strip()}` for impute_diameter! Please use numeric value. Currently this value will be ignored!')
+                    print(f'[WARNING] unrecognized option value `{x.strip()}` for impute_diameter! Please use numeric value. Currently this value will be ignored!')
                     
             if len(tmp_list) == 0:
-                print(f'WARNING: no valid value can be extracted from option value `{val}` for impute_diameter! Please use one numeric value or an array of numeric values separated by ",". Currently impute_diameter is set to be default value `{",".join([str(x) for x in default_paramdict["impute_diameter"]])}`!')
+                print(f'[WARNING] no valid value can be extracted from option value `{val}` for impute_diameter! Please use one numeric value or an array of numeric values separated by ",". Currently impute_diameter is set to be default value `{",".join([str(x) for x in default_paramdict["impute_diameter"]])}`!')
             else:
                 paramdict['impute_diameter'] = tmp_list
         
@@ -893,10 +893,10 @@ def parseOpt():
                 paramdict['hole_min_spots'] = int(float(val))
                 
                 if paramdict['hole_min_spots'] < 0:
-                    print(f'WARNING: negative option value `{paramdict["hole_min_spots"]}` for hole_min_spots! Please use non-negative integer. Currently hole_min_spots is set to be default value `{default_paramdict["hole_min_spots"]}`!')
+                    print(f'[WARNING] negative option value `{paramdict["hole_min_spots"]}` for hole_min_spots! Please use non-negative integer. Currently hole_min_spots is set to be default value `{default_paramdict["hole_min_spots"]}`!')
                     paramdict['hole_threshold'] = default_paramdict['hole_min_spots']
             except:
-                print(f'WARNING: unrecognized option value `{val}` for hole_min_spots! Please use numeric value. Currently hole_min_spots is set to be default value `{default_paramdict["hole_min_spots"]}`!')
+                print(f'[WARNING] unrecognized option value `{val}` for hole_min_spots! Please use numeric value. Currently hole_min_spots is set to be default value `{default_paramdict["hole_min_spots"]}`!')
             continue
         
         
@@ -906,7 +906,7 @@ def parseOpt():
             elif val.casefold() == 'false'.casefold():
                 paramdict['preserve_shape'] = False
             else:
-                print(f'WARNING: unrecognized option value `{val}` for preserve_shape! Please use string of true or false. Currently preserve_shape is set to be default value `{default_paramdict["preserve_shape"]}`!')
+                print(f'[WARNING] unrecognized option value `{val}` for preserve_shape! Please use string of true or false. Currently preserve_shape is set to be default value `{default_paramdict["preserve_shape"]}`!')
             continue
         
         
@@ -916,7 +916,7 @@ def parseOpt():
             elif val.casefold() == 'false'.casefold():
                 paramdict['diagnosis'] = False
             else:
-                print(f'WARNING: unrecognized option value `{val}` for diagnosis! Please use string of true or false. Currently diagnosis is set to be default value `{default_paramdict["diagnosis"]}`!')
+                print(f'[WARNING] unrecognized option value `{val}` for diagnosis! Please use string of true or false. Currently diagnosis is set to be default value `{default_paramdict["diagnosis"]}`!')
             continue
         
         
@@ -946,7 +946,7 @@ def parseOpt():
         if x < paramdict['diameter']:
             tmp_list.append(x)
         else:
-            print(f'WARNING: specified spot diameter value `{x}` for imputation >= physical diameter of spatial spots `{paramdict["diameter"]}`. Skip it!')
+            print(f'[WARNING] specified spot diameter value `{x}` for imputation >= physical diameter of spatial spots `{paramdict["diameter"]}`. Skip it!')
     paramdict['impute_diameter'] = sorted(tmp_list, reverse=True)
     
     if len(paramdict['impute_diameter']) == 0:

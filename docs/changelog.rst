@@ -1,6 +1,18 @@
 Changelog
 =========
 
+Version 1.7.0 (2025-10-05)
+--------------------------
+
+**Updates**:
+
+* Added support for continuous spatial weights (not just binary 0/1) in the adjacency matrix.
+
+* Simplified the codebase—removed unused caching paths (`#5 <https://github.com/az7jh2/SDePER/issues/5>`_), refined implementations, and reduced nesting in loss computation.
+
+* Reworked the Numba JIT kernel for loss evaluation, restoring the runtime performance that regressed after v1.6.2 due to NumPy/Numba dependency updates.
+
+
 Version 1.6.4 (2025-06-01)
 --------------------------
 

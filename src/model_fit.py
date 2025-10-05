@@ -18,11 +18,11 @@ from admm_fit import one_admm_fit
 import scipy.sparse as sparse
 from utils import reparameterTheta
 from hyper_parameter_optimization import cv_find_lambda_r, cv_find_lambda_g
-from config import min_val, print, sigma2_digits
+from config import min_val, print
 
 
 
-def fit_base_model(data, gamma_g=None, global_optimize=False, hybrid_version=True, opt_method='L-BFGS-B', verbose=False, use_cache=True, use_initial_guess=False):
+def fit_base_model(data, gamma_g=None, global_optimize=False, hybrid_version=True, opt_method='L-BFGS-B', verbose=False, use_initial_guess=False):
     '''
     fit local or base model without any Adaptive Lasso constrain or Graph Laplacian constrain
     
@@ -55,8 +55,6 @@ def fit_base_model(data, gamma_g=None, global_optimize=False, hybrid_version=Tru
         specify method used in scipy.optimize.minimize for local model fitting. The default is 'L-BFGS-B', a default method in scipy for optimization with bounds. Another choice would be 'SLSQP', a default method in scipy for optimization with constrains and bounds.
     verbose : bool, optional
         if True, print more information in program running.
-    use_cache : bool, optional
-        if True, use the cached dict of calculated likelihood values.
     use_initial_guess : bool, optional
         if True, use initial guess instead of uniform distribution for theta initialization.
 
@@ -99,10 +97,7 @@ def fit_base_model(data, gamma_g=None, global_optimize=False, hybrid_version=Tru
         
     e_alpha = np.full((n_spot,), 1.0)
     
-    if use_cache:
-        sigma2 = round(1.0, sigma2_digits)
-    else:
-        sigma2 = 1.0
+    sigma2 = 1.0
    
     if gamma_g is None:
         gamma_g = np.zeros((n_gene,))
@@ -112,13 +107,9 @@ def fit_base_model(data, gamma_g=None, global_optimize=False, hybrid_version=Tru
     # initialize density values of heavy-tail with initial sigma^2
     log_p_hv = generate_log_heavytail_array(z_hv, np.sqrt(sigma2))
     
-    if use_cache:
-        from local_fit_numba import insert_key_sigma2_wrapper
-        insert_key_sigma2_wrapper(sigma2)
-    
     if global_optimize:
         if verbose:
-            print('CAUTION: global optimization turned on!')
+            print('[CAUTION] global optimization turned on!')
     
     if verbose:
         print('calculate MLE theta and sigma^2 iteratively...')
@@ -134,17 +125,15 @@ def fit_base_model(data, gamma_g=None, global_optimize=False, hybrid_version=Tru
         tmp_start_in_loop = time()
         theta, e_alpha = update_theta(data, theta, e_alpha, gamma_g, sigma2,
                                       global_optimize=global_optimize, hybrid_version=hybrid_version,  opt_method=opt_method,
-                                      hv_x=z_hv, hv_log_p=log_p_hv, use_cache=use_cache)
+                                      hv_x=z_hv, hv_log_p=log_p_hv)
         time_local_opt = time() - tmp_start_in_loop
         
         # update sigma^2
         tmp_start_in_loop = time()
         sigma2 = update_sigma2(data, theta, e_alpha, gamma_g, sigma2,
                                 opt_method=opt_method, global_optimize=global_optimize,
-                                hv_x=z_hv, use_cache=use_cache)
-        # round sigma2 for rough but quick analysis
-        if use_cache:
-            sigma2 = round(sigma2, sigma2_digits)
+                                hv_x=z_hv)
+       
         # update density values of heavy-tail with current sigma^2
         log_p_hv = generate_log_heavytail_array(z_hv, np.sqrt(sigma2))
         time_sigma2 = time() - tmp_start_in_loop
@@ -212,7 +201,7 @@ def estimating_gamma_g(data, hybrid_version=True, opt_method='L-BFGS-B', verbose
         tmp_data['non_zero_mtx'] = np.sum(data['non_zero_mtx'], axis=0, keepdims=True) > 0
     
     # fit base model
-    theta, e_alpha, _ = fit_base_model(tmp_data, global_optimize=True, hybrid_version=hybrid_version, opt_method=opt_method, verbose=verbose, use_cache=False, use_initial_guess=False)
+    theta, e_alpha, _ = fit_base_model(tmp_data, global_optimize=True, hybrid_version=hybrid_version, opt_method=opt_method, verbose=verbose, use_initial_guess=False)
     
     
     assert(len(e_alpha)==1)
@@ -228,7 +217,7 @@ def estimating_gamma_g(data, hybrid_version=True, opt_method='L-BFGS-B', verbose
 
 
 
-def fit_model_two_stage(data, gamma_g=None, lambda_r=None, weight_threshold=1e-3, lambda_g=None, global_optimize=False, hybrid_version=True, opt_method='L-BFGS-B', verbose=False, use_cache=True, diagnosis=False):
+def fit_model_two_stage(data, gamma_g=None, lambda_r=None, weight_threshold=1e-3, lambda_g=None, global_optimize=False, hybrid_version=True, opt_method='L-BFGS-B', verbose=False, diagnosis=False):
     """
     fit Graph Laplacian Regularized Stratified Model (GLRM) in a two-stage way
     
@@ -261,8 +250,6 @@ def fit_model_two_stage(data, gamma_g=None, lambda_r=None, weight_threshold=1e-3
         specify method used in scipy.optimize.minimize for local model fitting. The default is '', a default method in scipy for optimization with bounds. Another choice would be 'SLSQP', a default method in scipy for optimization with constrains and bounds.
     verbose : bool, optional
         if True, print more information in program running.
-    use_cache : bool, optional
-        if True, use the cached dict of calculated likelihood values.
     diagnosis : bool
         if True save more information to files for diagnosis CVAE and hyper-parameter selection
 
@@ -290,7 +277,7 @@ def fit_model_two_stage(data, gamma_g=None, lambda_r=None, weight_threshold=1e-3
     
     tmp_start_time = time()
     
-    theta, e_alpha, sigma2 = fit_base_model(data, gamma_g=gamma_g, global_optimize=global_optimize, hybrid_version=hybrid_version, opt_method=opt_method, verbose=True, use_cache=use_cache, use_initial_guess=True)
+    theta, e_alpha, sigma2 = fit_base_model(data, gamma_g=gamma_g, global_optimize=global_optimize, hybrid_version=hybrid_version, opt_method=opt_method, verbose=True, use_initial_guess=True)
     
     print(f'MLE theta estimation finished. Elapsed time: {(time()-tmp_start_time)/60.0:.2f} minutes.')
     
@@ -302,11 +289,6 @@ def fit_model_two_stage(data, gamma_g=None, lambda_r=None, weight_threshold=1e-3
     # calculate the weight for adaptive lasso based on MLE theta
     print('\ncalculate weights of Adaptive Lasso...')
     
-    # optimize cache dict
-    # sigma2 already round to X digits
-    if use_cache:
-        from local_fit_numba import purge_keys
-        purge_keys(sigma2)
     
     tmp_theta = theta.copy()
     if hybrid_version:
@@ -330,7 +312,7 @@ def fit_model_two_stage(data, gamma_g=None, lambda_r=None, weight_threshold=1e-3
     
     if isinstance(lambda_r, list):
         print(f'hyper-parameter for Adaptive Lasso: use cross-validation to find the optimal value from {len(lambda_r)} candidates...')
-        lambda_r = cv_find_lambda_r(data, theta, e_alpha, gamma_g, sigma2, lasso_weight, lambda_r, hybrid_version=hybrid_version, opt_method=opt_method, hv_x=z_hv, hv_log_p=log_p_hv, use_admm=False, use_likelihood=True, use_cache=use_cache, diagnosis=diagnosis) 
+        lambda_r = cv_find_lambda_r(data, theta, e_alpha, gamma_g, sigma2, lasso_weight, lambda_r, hybrid_version=hybrid_version, opt_method=opt_method, hv_x=z_hv, hv_log_p=log_p_hv, use_admm=False, use_likelihood=True, diagnosis=diagnosis) 
         
     # stage 1 with determined lambda_r, but use ADMM framework
     # Laplacian Matrix is all 0 in stage 1
@@ -339,7 +321,7 @@ def fit_model_two_stage(data, gamma_g=None, lambda_r=None, weight_threshold=1e-3
     stage1_result = one_admm_fit(data, L, theta, e_alpha, gamma_g, sigma2, lambda_r=lambda_r, lasso_weight=lasso_weight,
                                  hv_x=z_hv, hv_log_p=log_p_hv, theta_mask=None,
                                  opt_method=opt_method, global_optimize=global_optimize, hybrid_version=hybrid_version,
-                                 verbose=verbose, use_cache=use_cache)
+                                 verbose=verbose)
     print(f'Stage 1 variable selection finished. Elapsed time: {(time()-tmp_start_time)/60.0:.2f} minutes.')
         
     
@@ -389,7 +371,7 @@ def fit_model_two_stage(data, gamma_g=None, lambda_r=None, weight_threshold=1e-3
                           lambda_r=0, lasso_weight=None,
                           hv_x=z_hv, hv_log_p=log_p_hv, theta_mask=theta_mask,
                           opt_method=opt_method, global_optimize=global_optimize,
-                          hybrid_version=hybrid_version, verbose=verbose, use_cache=use_cache)
+                          hybrid_version=hybrid_version, verbose=verbose)
     
     else:
         
@@ -409,7 +391,7 @@ def fit_model_two_stage(data, gamma_g=None, lambda_r=None, weight_threshold=1e-3
         if isinstance(lambda_g, list):
             print(f'hyper-parameter for Graph Laplacian Constrain: use cross-validation to find the optimal value from {len(lambda_g)} candidates...')
             # NOTE to use deep copy of Laplacian matrix to avoid modify it unexpectedly
-            lambda_g = cv_find_lambda_g(data, L.copy(), theta, e_alpha, theta_mask, gamma_g, sigma2, lambda_g, hybrid_version=hybrid_version, opt_method=opt_method, hv_x=z_hv, hv_log_p=log_p_hv, use_admm=True, use_likelihood=True, use_cache=use_cache, diagnosis=diagnosis)
+            lambda_g = cv_find_lambda_g(data, L.copy(), theta, e_alpha, theta_mask, gamma_g, sigma2, lambda_g, hybrid_version=hybrid_version, opt_method=opt_method, hv_x=z_hv, hv_log_p=log_p_hv, use_admm=True, use_likelihood=True, diagnosis=diagnosis)
     
         # UPDATE: multiple the hyperparameter with Laplacian matrix get 𝜆L
         lambda_gL = L * lambda_g
@@ -419,7 +401,7 @@ def fit_model_two_stage(data, gamma_g=None, lambda_r=None, weight_threshold=1e-3
                               lambda_r=0, lasso_weight=None,
                               hv_x=z_hv, hv_log_p=log_p_hv, theta_mask=theta_mask,
                               opt_method=opt_method, global_optimize=global_optimize,
-                              hybrid_version=hybrid_version, verbose=verbose, use_cache=use_cache)
+                              hybrid_version=hybrid_version, verbose=verbose)
     
     print(f'\nstage 2 finished. Elapsed time: {(time()-tmp_start_time)/60.0:.2f} minutes.\n')
     

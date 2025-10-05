@@ -235,15 +235,15 @@ def preprocess(spatial_file, ref_file, ref_anno_file, marker_file, A_file, use_c
     use_original_nUMI = True
     
     if filter_zero_gene:
-        print('\nCAUTION: filtering genes with nUMI=0 in spot before regression!')
+        print('\n[CAUTION] filtering genes with nUMI=0 in spot before regression!')
         if use_original_nUMI:
-            print('CAUTION: gene nUMI=0 determined by original spatial raw nUMI counts')
+            print('[CAUTION] gene nUMI=0 determined by original spatial raw nUMI counts')
             # reload the spatial data, and find out genes with nUMI>0
             non_zero_df = pd.concat(chunk.astype('Sparse[int]') for chunk in pd.read_csv(spatial_file, index_col=0, chunksize=1e4))
             non_zero_df = non_zero_df.loc[spatial_df.index, spatial_df.columns]
             non_zero_df = non_zero_df > 0
         else:
-            print('CAUTION: gene nUMI=0 determined by current CVAE transformed nUMI counts')
+            print('[CAUTION] gene nUMI=0 determined by current CVAE transformed nUMI counts')
             # just use the current spatial data, and find out genes with nUMI>0
             non_zero_df = spatial_df > 0
         non_zero_mtx = non_zero_df.values

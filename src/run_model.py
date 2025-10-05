@@ -12,6 +12,7 @@ It receieve the input data, build graph, build GLRM and fit coefficients
 
 
 
+import os
 import numpy as np
 from model_fit import fit_model_two_stage, estimating_gamma_g
 from config import print
@@ -88,23 +89,45 @@ def run_GLRM(data, lambda_r=None, weight_threshold=1e-3, lambda_g=None, estimate
     if hybrid_version:
         print('use hybrid version of GLRM')
     else:
-        print('CAUTION: use w version in GLRM!')
+        print('[CAUTION] use w version in GLRM!')
     
     import numba as na
     na.set_num_threads(n_jobs)
+    print("\nNumba version:", na.__version__)
+    
+    try:
+        import llvmlite
+        print("llvmlite:", llvmlite.__version__)
+    except Exception:
+        print("llvmlite: <unknown>")
+    
+    print("THREADING_LAYER:", os.environ.get("NUMBA_THREADING_LAYER", "<auto>"))
     print(f'Numba detected total {na.config.NUMBA_NUM_THREADS:d} available CPU cores. Use {na.get_num_threads():d} CPU cores')
+    
+    # BLAS threads (oversubscription?)
+    try:
+        from threadpoolctl import threadpool_info
+        for lib in threadpool_info():
+            name = (lib.get("internal_api","") + " " + lib.get("filename","")).lower()
+            if "blas" in name or "openblas" in name or "mkl" in name:
+                print("BLAS:", lib.get("filename","?"), "| threads:", lib.get("num_threads","?"))
+    except Exception as e:
+        print("threadpoolctl not available:", e)
+    
+    
+    from utils import check_numba, numba_info
+    numba_info()
+    check_numba()
+    
+    print('\n')
     
     from local_fit_numba import z_hv
     print(f'use {len(z_hv):d} points to calculate the heavy-tail density')
     
     print('use weight threshold for Adaptive Lasso: ', weight_threshold)
     
-    from local_fit_numba import update_unique_nUMI
-    update_unique_nUMI(data['Y'])
-    
-    use_cache = False  # finally NOT use it
-    if use_cache:
-        print('HIGHLIGHT: use dict to cache likelihoods in regression for quick calculation')
+    tmp_values = set(data['Y'].flatten())
+    print(f'total {len(tmp_values)} unique nUMIs, min: {min(tmp_values)}, max: {max(tmp_values)}')
     
     # define graph from adjacency matrix
     # UPDATE: we directly work on spatial weight matrix instead of graph object!
@@ -123,7 +146,7 @@ def run_GLRM(data, lambda_r=None, weight_threshold=1e-3, lambda_g=None, estimate
     
     # start fitting model
     # use two-stage implement
-    result = fit_model_two_stage(data, gamma_g=gamma_g, lambda_r=lambda_r, weight_threshold=weight_threshold, lambda_g=lambda_g,  global_optimize=global_optimize, hybrid_version=hybrid_version, opt_method=opt_method, verbose=verbose, use_cache=use_cache, diagnosis=diagnosis)
+    result = fit_model_two_stage(data, gamma_g=gamma_g, lambda_r=lambda_r, weight_threshold=weight_threshold, lambda_g=lambda_g,  global_optimize=global_optimize, hybrid_version=hybrid_version, opt_method=opt_method, verbose=verbose, diagnosis=diagnosis)
     
     
     # change dimension of theta back to 2-D

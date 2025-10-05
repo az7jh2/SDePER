@@ -99,7 +99,7 @@ def transferProps(query, ref, ref_props, n_neighbors=10, sigma=1, use_embedding=
     n_celltype = ref_props.shape[1]
     
     if (query.shape[1]<=2) and (use_embedding!='none'):
-        print(f'WARNING: original latent space dimension {query.shape[1]} <= 2, no need to use {use_embedding} embedding!')
+        print(f'[WARNING] original latent space dimension {query.shape[1]} <= 2, no need to use {use_embedding} embedding!')
         use_embedding = 'none'
     
     if use_embedding == 'PCA':

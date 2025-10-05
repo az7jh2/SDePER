@@ -64,7 +64,7 @@ def checkEarlyStop(x, num=3):
 
 
 
-def calcHVBaseModelLoss(theta, e_alpha, y, mu, gamma_g, sigma2, hv_x, hv_log_p, N, non_zero_mtx, use_cache):
+def calcHVBaseModelLoss(theta, e_alpha, y, mu, gamma_g, sigma2, hv_x, hv_log_p, N, non_zero_mtx):
     '''
     calculate the negative log-likelihood of Poisson log-normal distribution + heavy_tail for all spots
     
@@ -90,8 +90,6 @@ def calcHVBaseModelLoss(theta, e_alpha, y, mu, gamma_g, sigma2, hv_x, hv_log_p, 
         sequencing depth for all spots.
     non_zero_mtx : None or 2-D numpy matrix (spots * genes)
         If it's None, then do not filter zeros during regression. If it's a bool 2-D numpy matrix (spots * genes) as False means genes whose nUMI=0 while True means genes whose nUMI>0 in corresponding spots. The bool indicators can be calculated based on either observerd raw nUMI counts in spatial data, or CVAE transformed nUMI counts.
-    use_cache : bool, optional
-        if True, use the cached dict of calculated likelihood values.
         
     Returns
     -------
@@ -118,12 +116,12 @@ def calcHVBaseModelLoss(theta, e_alpha, y, mu, gamma_g, sigma2, hv_x, hv_log_p, 
             this_gamma_g = gamma_g[non_zero_gene_ind]
             this_mu = mu[:, non_zero_gene_ind]
             
-        output += hv_wrapper(this_w, this_y_vec, this_mu, this_gamma_g, sigma2, hv_x, hv_log_p, N[i], use_cache)
+        output += hv_wrapper(this_w, this_y_vec, this_mu, this_gamma_g, sigma2, hv_x, hv_log_p, N[i])
     return output
 
 
 
-def cv_find_lambda_r(data, mle_theta, mle_e_alpha, gamma_g, sigma2, lasso_weight, candidate_list, hybrid_version=True, opt_method='L-BFGS-B', hv_x=None, hv_log_p=None, use_admm=False, use_likelihood=True, k=5, use_cache=True, diagnosis=False):
+def cv_find_lambda_r(data, mle_theta, mle_e_alpha, gamma_g, sigma2, lasso_weight, candidate_list, hybrid_version=True, opt_method='L-BFGS-B', hv_x=None, hv_log_p=None, use_admm=False, use_likelihood=True, k=5, diagnosis=False):
     '''
     find optimal value for hyper-parameter lambda_r by k fold cross-validation
     
@@ -166,8 +164,6 @@ def cv_find_lambda_r(data, mle_theta, mle_e_alpha, gamma_g, sigma2, lasso_weight
         whether use negative log-likelihood as performance metric in cross-validation. The default is True, if False use RMSE of predicted gene expression.
     k : int, optional
         the number of folds in cross-validation, The default value is 5.
-    use_cache : bool, optional
-        if True, use the cached dict of calculated likelihood values.
     diagnosis : bool
         if True save more information to files for diagnosis CVAE and hyper-parameter selection
         
@@ -249,7 +245,7 @@ def cv_find_lambda_r(data, mle_theta, mle_e_alpha, gamma_g, sigma2, lasso_weight
                                            lambda_r=lambda_r, lasso_weight=lasso_weight,
                                            hv_x=hv_x, hv_log_p=hv_log_p, theta_mask=None,
                                            opt_method=opt_method, global_optimize=False, hybrid_version=hybrid_version,
-                                           verbose=False, use_cache=use_cache)
+                                           verbose=False)
                 theta = this_result['theta']
                 e_alpha = this_result['e_alpha']
                 
@@ -258,13 +254,13 @@ def cv_find_lambda_r(data, mle_theta, mle_e_alpha, gamma_g, sigma2, lasso_weight
                                               lambda_r=lambda_r, lasso_weight=lasso_weight,
                                               hv_x=hv_x, hv_log_p=hv_log_p, theta_mask=None,
                                               global_optimize=False, hybrid_version=hybrid_version, opt_method=opt_method,
-                                              verbose=False, use_cache=use_cache)
+                                              verbose=False)
             
             # note fitting result theta is 3-Dimensional
             
             # evaluate in validation fold
             if use_likelihood:
-                this_rmse_list.append(calcHVBaseModelLoss(np.squeeze(theta), e_alpha, data['Y'][:, valid_gene_idx], data['X'][:, valid_gene_idx], gamma_g[valid_gene_idx], sigma2, hv_x, hv_log_p, data['N'], valid_non_zero_mtx, use_cache))
+                this_rmse_list.append(calcHVBaseModelLoss(np.squeeze(theta), e_alpha, data['Y'][:, valid_gene_idx], data['X'][:, valid_gene_idx], gamma_g[valid_gene_idx], sigma2, hv_x, hv_log_p, data['N'], valid_non_zero_mtx))
                 
             else:
                 # use estimated theta and e_alpha predict all gene expression then subset validation fold
@@ -322,7 +318,7 @@ def cv_find_lambda_r(data, mle_theta, mle_e_alpha, gamma_g, sigma2, lasso_weight
     
     
     
-def cv_find_lambda_g(data, L, stage1_theta, stage1_e_alpha, theta_mask, gamma_g, sigma2, candidate_list, hybrid_version=True, opt_method='L-BFGS-B', hv_x=None, hv_log_p=None, use_admm=True, use_likelihood=True, k=5, use_cache=True, diagnosis=False):
+def cv_find_lambda_g(data, L, stage1_theta, stage1_e_alpha, theta_mask, gamma_g, sigma2, candidate_list, hybrid_version=True, opt_method='L-BFGS-B', hv_x=None, hv_log_p=None, use_admm=True, use_likelihood=True, k=5, diagnosis=False):
     '''
     find optimal value for hyper-parameter lambda_g by k fold cross-validation
     
@@ -367,8 +363,6 @@ def cv_find_lambda_g(data, L, stage1_theta, stage1_e_alpha, theta_mask, gamma_g,
         whether use negative log-likelihood as performance metric in cross-validation. The default is True, if False use RMSE of predicted gene expression.
     k : int, optional
         the number of folds in cross-validation, The default value is 5.
-    use_cache : bool, optional
-        if True, use the cached dict of calculated likelihood values.
     diagnosis : bool
         if True save more information to files for diagnosis CVAE and hyper-parameter selection
         
@@ -464,7 +458,7 @@ def cv_find_lambda_g(data, L, stage1_theta, stage1_e_alpha, theta_mask, gamma_g,
                                            lambda_r=0, lasso_weight=None,
                                            hv_x=hv_x, hv_log_p=hv_log_p, theta_mask=theta_mask,
                                            opt_method=opt_method, global_optimize=False, hybrid_version=hybrid_version,
-                                           verbose=False, use_cache=use_cache)
+                                           verbose=False)
                 theta = this_result['theta']
                 e_alpha = this_result['e_alpha']
                 
@@ -474,14 +468,14 @@ def cv_find_lambda_g(data, L, stage1_theta, stage1_e_alpha, theta_mask, gamma_g,
                                            lambda_r=0, lasso_weight=None,
                                            hv_x=hv_x, hv_log_p=hv_log_p, theta_mask=theta_mask,
                                            opt_method=opt_method, global_optimize=False, hybrid_version=hybrid_version,
-                                           verbose=False, use_cache=use_cache)
+                                           verbose=False)
                     theta = this_result['theta']
                     e_alpha = this_result['e_alpha']
                 else:
                     theta, e_alpha = update_theta(train_data, start_theta, start_e_alpha, train_gamma_g, sigma2,
                                               hv_x=hv_x, hv_log_p=hv_log_p, theta_mask=theta_mask,
                                               global_optimize=False, hybrid_version=hybrid_version, opt_method=opt_method,
-                                              verbose=False, use_cache=use_cache)
+                                              verbose=False)
             else:
                 raise Exception(f'lambda_g can not be negative! currently it is {lambda_g}')
             
@@ -489,7 +483,7 @@ def cv_find_lambda_g(data, L, stage1_theta, stage1_e_alpha, theta_mask, gamma_g,
             
             # evaluate in validation fold
             if use_likelihood:
-                this_rmse_list.append(calcHVBaseModelLoss(np.squeeze(theta), e_alpha, data['Y'][:, valid_gene_idx], data['X'][:, valid_gene_idx], gamma_g[valid_gene_idx], sigma2, hv_x, hv_log_p, data['N'], valid_non_zero_mtx, use_cache))
+                this_rmse_list.append(calcHVBaseModelLoss(np.squeeze(theta), e_alpha, data['Y'][:, valid_gene_idx], data['X'][:, valid_gene_idx], gamma_g[valid_gene_idx], sigma2, hv_x, hv_log_p, data['N'], valid_non_zero_mtx))
                 
             else:
                 # use estimated theta and e_alpha predict all gene expression then subset validation fold

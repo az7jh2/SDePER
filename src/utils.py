@@ -142,10 +142,10 @@ def read_spatial_data(spatial_file, filter_gene, n_hv_gene=0):
     # identify highly variable genes in spatial data, select TOP X HV genes
     # no need to consider highly variable genes in spatial data, as for cell-type deconvolution, we work on each spot independently
     if n_hv_gene >= spatial_spot_obj.n_vars:
-        print(f'\nWARNING: use all {spatial_spot_obj.n_vars} genes for downstream analysis as available genes in spatial data <= specified highly varabile gene number {n_hv_gene}')
+        print(f'\n[WARNING] use all {spatial_spot_obj.n_vars} genes for downstream analysis as available genes in spatial data <= specified highly varabile gene number {n_hv_gene}')
     
     elif n_hv_gene > 0:
-        print(f'\nWARNING: identify {n_hv_gene} highly variable genes from spatial data and keep those genes only...')
+        print(f'\n[WARNING] identify {n_hv_gene} highly variable genes from spatial data and keep those genes only...')
         spatial_hv_genes = sc.pp.highly_variable_genes(spatial_spot_obj, layer='raw_nUMI', flavor='seurat_v3', n_top_genes=n_hv_gene, inplace=False)
         spatial_hv_genes = spatial_hv_genes.loc[spatial_hv_genes['highly_variable']==True].index.to_list()
         spatial_spot_obj = spatial_spot_obj[:, spatial_hv_genes].copy()
@@ -211,7 +211,7 @@ def read_scRNA_data(ref_file, ref_anno_file, filter_cell, filter_gene):
     # check overlap of cells in gene expression and cell-type annotation
     overlap_cells = sorted(list(set(scrna_celltype.index.to_list()) & set(scrna_obj.obs_names)))
     if len(overlap_cells) < scrna_celltype.shape[0]:
-        print(f'WARNING: {scrna_celltype.shape[0]-len(overlap_cells)} cells in cell-type annotation but not found in nUMI matrix')
+        print(f'[WARNING] {scrna_celltype.shape[0]-len(overlap_cells)} cells in cell-type annotation but not found in nUMI matrix')
     
     # only keep cells with cell-type annotations
     scrna_obj = scrna_obj[overlap_cells, ].copy()
@@ -375,7 +375,7 @@ def run_DE(sc_obj, n_marker_per_cmp, use_fdr, p_val_cutoff, fc_cutoff, pct1_cuto
             if tmp_df.shape[0] <= n_marker_per_cmp:
                 
                 if tmp_df.shape[0] < n_marker_per_cmp:
-                    print(f'\nWARNING: only {tmp_df.shape[0]} genes passing filtering (<{n_marker_per_cmp}) for {this_celltype} vs {other_celltype}')
+                    print(f'\n[WARNING] only {tmp_df.shape[0]} genes passing filtering (<{n_marker_per_cmp}) for {this_celltype} vs {other_celltype}')
                 
                 # no need to further rank, directly select all available genes
                 scrna_marker_genes += tmp_df['names'].to_list()
@@ -653,3 +653,89 @@ def check_decoder(cvae, decoder, data, labels):
     # are them the same?
     tmp = np.all((tmp_output-tmp_output2)<1e-12)
     assert(tmp==True)
+
+
+
+def numba_info():
+    '''
+    this function checks the Numba information, especially the Threading Layer Information
+    
+    It turns out TBB or OMP gives similiar running speed
+    
+    Parameters
+    ----------
+    None.
+
+    Returns
+    -------
+    None.
+
+    '''
+    
+    from numba.misc import numba_sysinfo
+    info = numba_sysinfo.get_sysinfo()  # returns a dict of sections -> lines
+    
+    print('\nchecking Numba Threading Layer Options')
+    
+    # If you want a boolean for each layer:
+    tbb_ok = info['TBB Threading']
+    print(f"TBB Threading Layer Available                 : {tbb_ok}")
+    
+    omp_ok = info['OpenMP Threading']
+    print(f"OpenMP Threading Layer Available              : {omp_ok}")
+    
+    workqueue_ok = info['Workqueue Threading']
+    print(f"Workqueue Threading Layer Available           : {workqueue_ok}")
+    
+    '''
+    if tbb_ok:
+        os.environ.setdefault("NUMBA_THREADING_LAYER", "tbb")  # choose TBB
+        print("[HIGHLIGHT] Set Threading Layer to TBB")
+    else:
+        print("[WARNING] TBB not found. Install TBB beforehand; runtime may increase substantially if a different Threading Layer is used.")
+    '''
+
+
+
+def check_numba():
+    '''
+    this function checks the active threading layer and thread count in Numba
+    
+    Parameters
+    ----------
+    None.
+    
+    Returns
+    -------
+    None.
+    '''
+    
+    import numba as na
+    import time
+    
+    @na.jit(nopython=True, parallel=True, fastmath=False)
+    def tiny_kernel(x):
+        acc = 0.0
+        for i in na.prange(x.size):  # forces Numba to pick a threading layer
+            acc += x[i] * 0.5 + 1.0
+        return acc
+    
+    # small input so this is instant on any machine
+    x = np.arange(200000, dtype=np.float64)
+    
+    # Compile + first run
+    t0 = time.perf_counter()
+    _ = tiny_kernel(x)  # triggers compilation and backend init
+    t1 = time.perf_counter()
+    
+    # Hot run (no compile)
+    t2 = time.perf_counter()
+    res2 = tiny_kernel(x)
+    t3 = time.perf_counter()
+    
+    print("Active threading layer:", na.threading_layer())
+    print("Active Numba threads:", na.get_num_threads())
+    print("Compiled signatures:", tiny_kernel.signatures)
+    print(f"Elapsed (compile + 1st run): {t1 - t0:.4f}s")
+    print(f"Elapsed (hot run):           {t3 - t2:.4f}s")
+    print(f"Result checksum (should be 10000150000.000):  {res2:.3f}")

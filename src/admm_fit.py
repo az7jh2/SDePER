@@ -18,7 +18,7 @@ from local_fit_numba import update_theta, adaptive_lasso
 from scipy.sparse.linalg import cg
 from scipy import sparse
 from utils import reparameterTheta, reportRMSE
-from config import min_theta, print, sigma2_digits
+from config import min_theta, print
 from local_fit_numba import generate_log_heavytail_array
 
 
@@ -29,7 +29,7 @@ def one_admm_fit(data, L, theta, e_alpha, gamma_g, sigma2, lambda_r=1.0, lasso_w
                  rho=1, mu=10, tau_incr=2, tau_decr=2, max_rho=1e1, min_rho=1e-1,
                  maxiter=100, max_cg_iterations=10,
                  dynamic_rho=True, queue_len=3, diff_threshold=0.05, rho_incr=2, rho_decr=2, diff_scale=5, diff_stop=5e-5,
-                 opt_method='L-BFGS-B', global_optimize=False, hybrid_version=True, verbose=False, use_cache=True):
+                 opt_method='L-BFGS-B', global_optimize=False, hybrid_version=True, verbose=False):
     """
     perform a whole ADMM iterations once as one fitting procedure in GLRM
     
@@ -111,8 +111,6 @@ def one_admm_fit(data, L, theta, e_alpha, gamma_g, sigma2, lambda_r=1.0, lasso_w
         if True, use the hybrid_version of GLRM, i.e. in ADMM local model loss function optimization for w but adaptive lasso constrain on theta. If False, local model loss function optimization and adaptive lasso will on the same w. The default is True.
     verbose : bool, optional
         if True, print information in each ADMM loop
-    use_cache : bool, optional
-        if True, use the cached dict of calculated likelihood values.
 
     Returns
     -------
@@ -140,10 +138,7 @@ def one_admm_fit(data, L, theta, e_alpha, gamma_g, sigma2, lambda_r=1.0, lasso_w
     
     if hv_log_p is None:
         # initialize density values of heavy-tail with initial sigma^2
-        if use_cache:
-            hv_log_p = generate_log_heavytail_array(z_hv, np.sqrt(round(sigma2, sigma2_digits)))
-        else:
-            hv_log_p = generate_log_heavytail_array(z_hv, np.sqrt(sigma2))
+        hv_log_p = generate_log_heavytail_array(z_hv, np.sqrt(sigma2))
         
     # if theta_mask is not None, then the theta and e_alpha are already pre-processed with theta_mask
     
@@ -161,7 +156,7 @@ def one_admm_fit(data, L, theta, e_alpha, gamma_g, sigma2, lambda_r=1.0, lasso_w
     res_dual_tilde = np.zeros(theta.shape)
         
     if dynamic_rho:
-        #print('CAUTION: dynamic rho trick is turned on!')
+        #print('[CAUTION] dynamic rho trick is turned on!')
         rmse_queue = []
         pre_tilde_rmse = 0
         pre_hat_rmse = 0
@@ -181,12 +176,12 @@ def one_admm_fit(data, L, theta, e_alpha, gamma_g, sigma2, lambda_r=1.0, lasso_w
         # use the previous theta as the warm start for next iteration
         if hybrid_version:
             # ADMM loss function on theta
-            theta, e_alpha = update_theta(data, theta, e_alpha, gamma_g, sigma2, theta_hat-u, 1./rho, global_optimize=global_optimize, hybrid_version=hybrid_version, opt_method=opt_method, hv_x=hv_x, hv_log_p=hv_log_p, theta_mask=theta_mask, verbose=False, use_cache=use_cache)
+            theta, e_alpha = update_theta(data, theta, e_alpha, gamma_g, sigma2, theta_hat-u, 1./rho, global_optimize=global_optimize, hybrid_version=hybrid_version, opt_method=opt_method, hv_x=hv_x, hv_log_p=hv_log_p, theta_mask=theta_mask, verbose=False)
         else:
             # ADMM loss function on w
             theta, e_alpha = update_theta(data, theta, e_alpha, gamma_g, sigma2,
                                           reparameterTheta(theta_hat-u, e_alpha), 1./rho,
-                                          global_optimize=global_optimize, hybrid_version=hybrid_version, opt_method=opt_method, hv_x=hv_x, hv_log_p=hv_log_p, theta_mask=theta_mask, verbose=False, use_cache=use_cache)
+                                          global_optimize=global_optimize, hybrid_version=hybrid_version, opt_method=opt_method, hv_x=hv_x, hv_log_p=hv_log_p, theta_mask=theta_mask, verbose=False)
         
         # theta has already been masked inside update_theta function
         
