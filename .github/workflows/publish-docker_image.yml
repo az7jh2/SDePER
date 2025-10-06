@@ -11,8 +11,9 @@
 
 name: Publish SDePER Docker image
 
-on: push
-
+on:
+  release:
+    types: [published]
 
 jobs:
   push_to_registry:
@@ -30,7 +31,7 @@ jobs:
         
       - name: Extract version number from tag  # note to create an environment variable for later reference; only numberr retained, the first "v" removed
         run: |
-          TAG_NAME="v1.7.0"
+          TAG_NAME="${{ github.event.release.tag_name }}"
           echo "VERSION_NUMBER=${TAG_NAME#v}" >> $GITHUB_ENV
 
       - name: Log in to Docker Hub
@@ -64,4 +65,4 @@ jobs:
         with:
           subject-name: index.docker.io/${{ secrets.DOCKER_USERNAME }}/sdeper
           subject-digest: ${{ steps.push.outputs.digest }}
-          push-to-registry: true
+          push-to-registry: false  # we do not push it to Docker Hub
