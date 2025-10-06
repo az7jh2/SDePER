@@ -147,9 +147,9 @@ def preprocess(spatial_file, ref_file, ref_anno_file, marker_file, A_file, use_c
             
             # extract marker gene overlapped with spatial data
             marker_genes = sorted(list(set(spatial_df.columns) & set(marker_df.columns)))
-            print(f'from user specified marker gene expression use {len(marker_genes)} marker genes overlapped with spatial + scRNA-seq data')
+            print(f'from user specified marker gene expression use {len(marker_genes)} marker genes overlapped with spatial data')
             # if len(marker_genes) < spatial_df.shape[1]:
-            #     print(f'{spatial_df.shape[1]-len(marker_genes)} genes in overlapped gene list between spatial and scRNA-seq data but not found in user provided marker gene expression: {", ".join(set(spatial_df.columns).difference(set(marker_genes)))}\n')
+            #     print(f'{spatial_df.shape[1]-len(marker_genes)} genes in overlapped gene list between spatial data but not found in user provided marker gene expression: {", ".join(set(spatial_df.columns).difference(set(marker_genes)))}\n')
             
         else:
             # perform DE, return the marker gene expression. The identified markers but not in spatial data has already been removed
@@ -219,6 +219,7 @@ def preprocess(spatial_file, ref_file, ref_anno_file, marker_file, A_file, use_c
         if 'tmp_scrna_obj' not in locals():
             if ref_file is not None and ref_anno_file is not None:
                 from utils import read_scRNA_data
+                print('\nread reference scRNA-seq data for plot only')
                 tmp_scrna_obj = read_scRNA_data(ref_file, ref_anno_file, filter_cell, filter_gene)
             else:
                 tmp_scrna_obj = None
