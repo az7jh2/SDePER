@@ -1,6 +1,19 @@
 Changelog
 =========
 
+Version 1.7.1 (2025-10-08)
+--------------------------
+
+**Updates**:
+
+* Removed `NetworkX <https://networkx.org/>`_ dependency.
+
+**Bug Fixes**:
+
+* Refined the TensorFlow version constraint in the Bioconda recipe to lock compatibility to 2.15.
+This adjustment prevents Conda from resolving to higher TensorFlow versions that cause runtime failures.
+
+
 Version 1.7.0 (2025-10-05)
 --------------------------
 
