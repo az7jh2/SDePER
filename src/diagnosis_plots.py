@@ -646,6 +646,37 @@ def diagnosisParamsTuning(x, y, optimal_idx, x_label, y_label):
 
 
 
+def diagnosisParamsSpotwiseLambdarTuning(x):
+    '''
+    generate histogram plot show optimal lambda_r in hyper parameter tuning by BIC
+
+    Parameters
+    ----------
+    x : list
+        a list of optimal lambda_r
+
+    Returns
+    -------
+    None.
+    '''
+    
+    # need to create subfolders first, otherwise got FileNotFoundError
+    os.makedirs(os.path.join(diagnosis_path, 'GLRM_params_tuning'), exist_ok=True)
+    
+    sns.set()
+    
+    fig, ax = plt.subplots()
+    sns.histplot(x, ax=ax)
+
+    ax.set_xlabel('Optimal lambda_r')
+    ax.set_ylabel('Count')
+        
+    fig.tight_layout()
+    fig.savefig(os.path.join(diagnosis_path, 'GLRM_params_tuning', 'tuning_lambda_r_by_BIC.png'))
+    plt.close()
+
+
+
 def plot_imputation(df, grid_df, contours, hierarchy, figname, figsize=(6.4, 4.8)):
     '''
     draw scatter plot of spatial spots and imputed spots for diagnosis.

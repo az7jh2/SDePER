@@ -138,7 +138,7 @@ def one_admm_fit(data, L, theta, e_alpha, gamma_g, sigma2, lambda_r=1.0, lasso_w
     
     if hv_log_p is None:
         # initialize density values of heavy-tail with initial sigma^2
-        hv_log_p = generate_log_heavytail_array(z_hv, np.sqrt(sigma2))
+        hv_log_p = generate_log_heavytail_array(hv_x, np.sqrt(sigma2))
         
     # if theta_mask is not None, then the theta and e_alpha are already pre-processed with theta_mask
     

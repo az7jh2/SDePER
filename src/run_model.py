@@ -19,7 +19,7 @@ from config import print
 
 
 
-def run_GLRM(data, lambda_r=None, weight_threshold=1e-3, lambda_g=None, estimate_gamma_g=True, n_jobs=1, threshold=0, diagnosis=False, verbose=False):
+def run_GLRM(data, lambda_r=None, lambda_g=None, estimate_gamma_g=True, n_jobs=1, threshold=0, diagnosis=False, verbose=False):
     """
     run GLRM, and fit coefficients
 
@@ -38,8 +38,6 @@ def run_GLRM(data, lambda_r=None, weight_threshold=1e-3, lambda_g=None, estimate
             initial_guess: initial guess of cell-type proportions of spatial spots.
     lambda_r : float, optional
         strength for Adaptive Lasso penalty. The default is None, i.e. use cross-validation to determine optimal value
-    weight_threshold : float, optional
-        threshold for Adaptive Lasso weight. Theta values smaller than threshold value will be re-set. The default is 1e-3.
     lambda_g : float, optional
         edge weight for graph, and will affect the strength of Graph Laplacian constrain. The default is None, i.e. use cross-validation to determine optimal value
     estimate_gamma_g : bool, optional
@@ -60,9 +58,7 @@ def run_GLRM(data, lambda_r=None, weight_threshold=1e-3, lambda_g=None, estimate
             theta : celltype proportions (#spots * #celltypes)\n
             e_alpha : spot-specific effect (1-D array with length #spot)\n
             sigma2 : variance paramter of the lognormal distribution (float)\n
-            gamma_g : gene-specific platform effect for all genes (1-D array with length #gene)\n
-            theta_tilde : celltype proportions for Adaptive Lasso (#spots * #celltypes)\n
-            theta_hat : celltype proportions for Graph Laplacian constrain (#spots * #celltypes)
+            gamma_g : gene-specific platform effect for all genes (1-D array with length #gene)
     """
     
     assert(data['Y'].shape[1] == data['X'].shape[1])
@@ -90,6 +86,12 @@ def run_GLRM(data, lambda_r=None, weight_threshold=1e-3, lambda_g=None, estimate
         print('use hybrid version of GLRM')
     else:
         print('[CAUTION] use w version in GLRM!')
+        
+    use_admm = False
+    if use_admm:
+        print('use ADMM optimization framework')
+    else:
+        print('[HIGHLIGHT] ADMM framework NOT used')
     
     import numba as na
     na.set_num_threads(n_jobs)
@@ -124,8 +126,6 @@ def run_GLRM(data, lambda_r=None, weight_threshold=1e-3, lambda_g=None, estimate
     from local_fit_numba import z_hv
     print(f'use {len(z_hv):d} points to calculate the heavy-tail density')
     
-    print('use weight threshold for Adaptive Lasso: ', weight_threshold)
-    
     tmp_values = set(data['Y'].flatten())
     print(f'total {len(tmp_values)} unique nUMIs, min: {min(tmp_values)}, max: {max(tmp_values)}')
     
@@ -146,19 +146,22 @@ def run_GLRM(data, lambda_r=None, weight_threshold=1e-3, lambda_g=None, estimate
     
     # start fitting model
     # use two-stage implement
-    result = fit_model_two_stage(data, gamma_g=gamma_g, lambda_r=lambda_r, weight_threshold=weight_threshold, lambda_g=lambda_g,  global_optimize=global_optimize, hybrid_version=hybrid_version, opt_method=opt_method, verbose=verbose, diagnosis=diagnosis)
+    result = fit_model_two_stage(data, gamma_g=gamma_g, lambda_r=lambda_r, lambda_g=lambda_g,  global_optimize=global_optimize, hybrid_version=hybrid_version, opt_method=opt_method, verbose=verbose, diagnosis=diagnosis, use_admm=use_admm)
     
     
     # change dimension of theta back to 2-D
     result['theta'] = np.squeeze(result['theta'])
-    result['theta_tilde'] = np.squeeze(result['theta_tilde'])
-    result['theta_hat'] = np.squeeze(result['theta_hat'])
     
 
     # post-process theta to set theta<XXXX as 0 then re-normalize remaining theta to sum to 1
     print('\nPost-processing estimated cell-type proportion theta...')
     print(f'hard thresholding small theta values with threshold {threshold}')
     for i in range(result['theta'].shape[0]):
+        
+        if (np.all(result['theta'][i,:]<threshold)):
+            print(f'[WARNING] Spot {i:d} all cell type proportion theta values<{threshold:.6f}! thresholding skipped')
+            continue
+        
         tmp_ind = (result['theta'][i,:]>0) & (result['theta'][i,:]<threshold)
         if tmp_ind.any():
             print(f'set small theta values<{threshold:.6f} to 0 and renorm remaining theta for spot {i:d}')

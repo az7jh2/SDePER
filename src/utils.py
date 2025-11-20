@@ -400,9 +400,9 @@ def run_DE(sc_obj, n_marker_per_cmp, use_fdr, p_val_cutoff, fc_cutoff, pct1_cuto
                 
                 # sort by fold change or p value
                 if sortby_fc:
-                    tmp_df.sort_values(by=[pval_col, 'logfoldchanges'], ascending=[True, False], inplace=True)
-                else:
                     tmp_df.sort_values(by=['logfoldchanges', pval_col], ascending=[False, True], inplace=True)
+                else:
+                    tmp_df.sort_values(by=[pval_col, 'logfoldchanges'], ascending=[True, False], inplace=True)
                 
                 # select top X marker genes
                 scrna_marker_genes += tmp_df['names'].to_list()[:n_marker_per_cmp]

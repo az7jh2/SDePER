@@ -267,6 +267,9 @@ def hv_comb(w_vec, y_vec, mu, gamma_g, sigma2, hv_x, hv_log_p, N):
         sum of negative log-likelihood across all genes in one spot + gradient vector of w.
     '''
     # return both negative log-likelihoods and 1st order derivative
+    if N is None:
+        N = np.sum(y_vec)
+    
     # The @ operator performs matrix multiplication, w_vec@mu produces a 1-D numpy array with length as number of genes
     MU = np.log(w_vec@mu+min_val) + gamma_g + np.log(N)
     this_lambda = (w_vec@mu) * np.exp(gamma_g) * N
@@ -332,6 +335,9 @@ def hv_wrapper(w_vec, y_vec, mu, gamma_g, sigma2, hv_x, hv_log_p, N):
     float
         sum of negative log-likelihood across all genes in one spot.
     '''
+    
+    if N is None:
+        N = np.sum(y_vec)
     
     MU = np.log(w_vec@mu+min_val) + gamma_g + np.log(N)
     likelihoods = calc_hv_numba(MU, y_vec, hv_x, hv_log_p, np.zeros(MU.shape), gamma)
@@ -487,6 +493,179 @@ def objective_loss_theta(w_vec, y_vec, mu, gamma_g, sigma2, nu_vec, rho, lambda_
 
 
 
+def optimize_one_theta(mu, y_vec, N, this_warm_start_theta, this_warm_start_e_alpha, gamma_g, sigma2, spot_name, nu_vec=None, rho=None, lambda_r=None, lasso_weight_vec=None, lambda_l2=None, global_optimize=False, hybrid_version=True, opt_method='L-BFGS-B', hv_x=None, hv_log_p=None, this_theta_mask=None, skip_opt=True, verbose=False):
+    '''
+    update theta (celltype proportion) sigma2 (variance paramter of the log-normal distribution) and gamma_g (gene-specific platform effect) by MLE in ONE SPOT
+
+    Parameters
+    ----------
+    mu : 2-D numpy matrix
+        matrix of celltype specific marker gene expression (celltypes * genes).
+    y_vec : 1-D numpy array
+        spatial gene expression (length #genes).
+    N : int or None
+        sequencing depth of this spot. If it's None, use sum of observed marker gene expressions as sequencing depth.
+    spot_name : string
+        name of this spot.
+    this_warm_start_theta : 1-D numpy array (length #celltypes)
+        initial guess of theta (celltype proportion).
+    this_warm_start_e_alpha : float
+        initial guess of e_alpha (spot-specific effect).
+    gamma_g : 1-D numpy array
+        gene-specific platform effect for all genes.
+    sigma2 : float
+        variance paramter of the lognormal distribution of ln(lambda). All gene share the same variance.
+    nu_vec : 1-D numpy array (length #celltypes), optional
+        variable for ADMM penalty of all spots
+        in 3 part ADMM nu = theta_hat (used for regularization/penalty) - u (scaled dual variables to make theta = theta_hat)
+    rho : float, optional
+        parameter for the strength of ADMM loss to make theta equals theta_hat
+    lambda_r : float, optional
+        parameter for the strength of Adaptive Lasso loss to shrink theta
+    lasso_weight_vec : 1-D numpy array (length #celltypes), optional
+        weight of Adaptive Lasso, 1 ./ theta
+    lambda_l2 : float
+        parameter for the strength of L2 panealty to shrink theta
+    global_optimize : bool, optional
+        if is True, use basin-hopping algorithm to find the global minimum. The default is False.
+    hybrid_version : bool, optional
+        if True, use the hybrid_version of GLRM, i.e. in ADMM local model loss function optimization for w but adaptive lasso constrain on theta. If False, local model loss function optimization and adaptive lasso will on the same w. The default is True.
+    opt_method : string, optional
+        specify method used in scipy.optimize.minimize for local model fitting. The default is 'L-BFGS-B', a default method in scipy for optimization with bounds. Another choice would be 'SLSQP', a default method in scipy for optimization with constrains and bounds.
+    hv_x : 1-D numpy array, optional
+        data points served as x for calculation of probability density values. Only used for heavy-tail.
+    hv_log_p : 1-D numpy array, optional
+        log density values of normal distribution N(0, sigma^2) + heavy-tail. Only used for heavy-tail.
+    this_theta_mask : 1-D numpy array (length #celltypes), optional
+        mask for cell-type proportions (1: present, 0: not present).
+    skip_opt : bool, optional
+        if True, when only one cell type present, we skip optimization and directly return theta.
+    verbose : bool, optional
+        if True, print more information.
+        
+    Returns
+    -------
+    w_result : 1-D numpy array (length #celltypes)
+        updated w, i.e. theta (celltype proportion) * e_alpha.
+    '''
+
+
+    n_celltype = len(this_warm_start_theta)
+    
+    if skip_opt:
+        if (this_warm_start_theta==1).any():
+            assert np.sum(this_warm_start_theta) == 1
+            #print(f'skip optimization for spot {spot_name} as only one celltype present')
+            return(this_warm_start_theta)
+    
+    # Prepare variables based on whether sparsity considered via theta mask
+    if this_theta_mask is None:
+        this_present_celltype_index = None
+    else:
+        this_present_celltype_index = this_theta_mask==1
+    
+        # only one cell-type present, we can directly determine the proportion as 1
+        if skip_opt:
+            if np.sum(this_present_celltype_index) == 1:
+                simple_sol = np.zeros((n_celltype,))
+                simple_sol[this_present_celltype_index] = 1
+                return(simple_sol)
+
+    if this_present_celltype_index is not None:
+        # extract only marker gene expressions for presented cell-types
+        mu = mu[this_present_celltype_index, :]
+        
+        if nu_vec is not None:
+            nu_vec = nu_vec[this_present_celltype_index]
+    
+        this_warm_start_theta = this_warm_start_theta[this_present_celltype_index]
+    
+        if lasso_weight_vec is not None:
+            lasso_weight_vec = lasso_weight_vec[this_present_celltype_index]
+            
+    # re-parametrization
+    warm_start_w = this_warm_start_theta * this_warm_start_e_alpha
+    
+        
+    # start optimization
+    # call minimize function to solve w (e_alpha*theta)
+    # bounds : tuple of tuples
+    #    sequence of (min, max) pairs for each element in w_vec
+    # min not set as 0 to avoid divided by 0 or log(0)
+    # if jac is a Boolean and is True, fun is assumed to return a tuple (f, g) containing the objective function and the gradient
+    
+    #from time import time
+    #start_time = time()
+    
+    bounds = (((min_theta, None),) * len(warm_start_w))
+    
+    if global_optimize:
+        bounded_step = RandomDisplacementBounds(np.array([b[0] for b in bounds]), np.array([b[1] for b in bounds]))
+        # use the basin-hopping algorithm to find the global minimum
+        sol = basinhopping(objective_loss_theta, warm_start_w, niter=10, T=1.0, take_step=bounded_step,
+                           minimizer_kwargs={'method': opt_method,
+                                             'args': (y_vec, mu, gamma_g, sigma2, nu_vec, rho, lambda_r, lasso_weight_vec, lambda_l2, hybrid_version, hv_x, hv_log_p, N),
+                                             'bounds': bounds,
+                                             'options': {'maxiter': 250, 'eps': theta_eps},
+                                             'jac': True
+                                             },
+                           disp=False)
+    else:
+        sol = minimize(objective_loss_theta, warm_start_w, args=(y_vec, mu, gamma_g, sigma2, nu_vec, rho, lambda_r, lasso_weight_vec, lambda_l2, hybrid_version, hv_x, hv_log_p, N),
+                   method=opt_method,
+                   bounds=bounds, options={'disp': False, 'maxiter': 250, 'eps': theta_eps}, jac=True)
+    
+    #print(f'spot {spot_name} optimization finished in {sol.nit} iterations. Elapsed time: {time()-start_time:.2f} seconds.')
+    
+    if not global_optimize:
+        if not sol.success:
+            if verbose:
+                # Ref: status 2 - Maximum number of iterations has been exceeded
+                print(f'[WARNING] w optimization in local model of spot {spot_name} not successful! Caused by: {sol.message}')
+    
+    solve_fail_flag = False
+    
+    if sum(sol.x) == 0:
+        print(f'###### [Error] w optimization in local model of spot {spot_name} returns all 0s! ######')
+        solve_fail_flag = True
+        
+    if np.any(np.isnan(sol.x)):
+        print(f'###### [Error] w optimization in local model of spot {spot_name} returns NaN value! ######')
+        solve_fail_flag = True
+       
+    if np.any(np.isinf(sol.x)):
+        print(f'###### [Error] w optimization in local model of spot {spot_name} returns Infinite value! ######')
+        solve_fail_flag = True
+        
+    if solve_fail_flag:
+        # replace NaN or Infinite as 0
+        this_sol = np.nan_to_num(sol.x, nan=0.0, posinf=0.0, neginf=0.0)
+        # NOTE this is w, no need to sum to 1
+        print('repalce non-numeric value as 0')
+        
+        if sum(this_sol) == 0:
+            # reset w to all elements equal
+            tmp_len = this_sol.shape[0]
+            this_sol = np.full((tmp_len,), 1.0/tmp_len) * this_warm_start_e_alpha
+            print('[WARNING] reset w to all elements identical!')
+
+    else:
+        this_sol = sol.x
+        
+    # set w values at boundary to 0; note to allow a tolerance
+    this_sol[this_sol<=(min_theta*2)] = 0
+    
+    
+    # transform back w to original dimension, adding non-present values
+    if this_theta_mask is None:
+        w_result = this_sol
+    else:
+        w_result = np.zeros((n_celltype,))
+        w_result[this_present_celltype_index] = this_sol
+    
+    return(w_result)
+
+
 def update_theta(data, warm_start_theta, warm_start_e_alpha, gamma_g, sigma2, nu=None, rho=None, lambda_r=None, lasso_weight=None, lambda_l2=None, global_optimize=False, hybrid_version=True, opt_method='L-BFGS-B', hv_x=None, hv_log_p=None, theta_mask=None, verbose=False):
     '''
     update theta (celltype proportion) and e_alpha (spot-specific effect) given sigma2 (variance paramter of the log-normal distribution) and gamma_g (gene-specific platform effect) by MLE
@@ -570,6 +749,8 @@ def update_theta(data, warm_start_theta, warm_start_e_alpha, gamma_g, sigma2, nu
     n_celltype = data["X"].shape[0]
     n_spot = data["Y"].shape[0]
     
+    # NOTE input warm_start_theta, warm_start_e_alpha will NOT be changed inside the function
+    
     # skip optimization if the initial theta corresponding to only one cell-type
     skip_opt = True
     
@@ -577,150 +758,48 @@ def update_theta(data, warm_start_theta, warm_start_e_alpha, gamma_g, sigma2, nu
     results = []
     for i in range(n_spot):
         
-        if skip_opt:
-            this_warm_start_theta = warm_start_theta[i, :, :].flatten()
-            if (this_warm_start_theta==1).any():
-                assert np.sum(this_warm_start_theta) == 1
-                results.append(this_warm_start_theta)
-                #print(f'skip optimization for spot {i} as only one celltype present')
-                continue
-        
+        this_spot_name = data["spot_names"][i]
+        this_warm_start_theta = warm_start_theta[i, :, :].copy().flatten()
+        this_warm_start_e_alpha = warm_start_e_alpha[i]
+
         if theta_mask is None:
-            this_present_celltype_index = None
+            this_theta_mask = None
         else:
-            this_present_celltype_index = theta_mask[i,:,:]==1
-        
-            # only one cell-type present, we can directly determine the proportion as 1
-            if np.sum(this_present_celltype_index) == 1:
-                simple_sol = np.zeros((n_celltype,))
-                simple_sol[this_present_celltype_index.flatten()] = 1
-                results.append(simple_sol)
-                continue
-        
-        y_vec = data["Y"][i, :]
-        
-        # extract only marker gene expressions for presented cell-types
-        if theta_mask is None:
-            mu = data["X"]
-        else:
-            mu = data["X"][this_present_celltype_index.flatten(), :]
-        
+            this_theta_mask = theta_mask[i, :, :].copy().flatten()
+
+        y_vec = data["Y"][i, :].copy()
+        mu = data["X"].copy()
+
         if nu is None:
             nu_vec = None
         else:
-            if theta_mask is None:
-                nu_vec = nu[i, :, :].flatten()
-            else:
-                nu_vec = nu[i, this_present_celltype_index].flatten()
-        
-        if theta_mask is None:
-            this_warm_start_theta = warm_start_theta[i, :, :].flatten()
-        else:
-            this_warm_start_theta = warm_start_theta[i, this_present_celltype_index].flatten()
-        
-        this_warm_start_e_alpha = warm_start_e_alpha[i]
-        
-        # re-parametrization
-        warm_start_w = this_warm_start_theta * this_warm_start_e_alpha
-        
+            nu_vec = nu[i, :, :].copy().flatten()
+
         if lasso_weight is None:
             lasso_weight_vec = None
         else:
-            if theta_mask is None:
-                lasso_weight_vec = lasso_weight[i, :, :].flatten()
-            else:
-                lasso_weight_vec = lasso_weight[i, this_present_celltype_index].flatten()
-            
-        # sequencing depth
+            lasso_weight_vec = lasso_weight[i, :, :].copy().flatten()
+       
         if data["N"] is None:
             N = None
         else:
             N = data["N"][i]
-            
+
         # filter zero genes
         if data['non_zero_mtx'] is None:
             this_y_vec = y_vec
-            this_gamma_g = gamma_g
+            this_gamma_g = gamma_g.copy()
             this_mu = mu
         else:
             non_zero_gene_ind = data['non_zero_mtx'][i, :]
-            #print(f'total {np.sum(non_zero_gene_ind)} non-zero genes ({np.sum(non_zero_gene_ind)/len(non_zero_gene_ind):.2%}) for spot {i:d}')
+            #print(f'total {np.sum(non_zero_gene_ind)} non-zero genes ({np.sum(non_zero_gene_ind)/len(non_zero_gene_ind):.2%}) for spot {this_spot_name}')
             this_y_vec = y_vec[non_zero_gene_ind]
-            this_gamma_g = gamma_g[non_zero_gene_ind]
+            this_gamma_g = gamma_g[non_zero_gene_ind].copy()
             this_mu = mu[:, non_zero_gene_ind]
             
-        # start optimization
-        # call minimize function to solve w (e_alpha*theta)
-        # bounds : tuple of tuples
-        #    sequence of (min, max) pairs for each element in w_vec
-        # min not set as 0 to avoid divided by 0 or log(0)
-        # if jac is a Boolean and is True, fun is assumed to return a tuple (f, g) containing the objective function and the gradient
+        # call optimization function
+        results.append(optimize_one_theta(this_mu, this_y_vec, N, this_warm_start_theta, this_warm_start_e_alpha, this_gamma_g, sigma2, this_spot_name, nu_vec=nu_vec, rho=rho, lambda_r=lambda_r, lasso_weight_vec=lasso_weight_vec, lambda_l2=lambda_l2, global_optimize=global_optimize, hybrid_version=hybrid_version, opt_method=opt_method, hv_x=hv_x, hv_log_p=hv_log_p, this_theta_mask=this_theta_mask, skip_opt=skip_opt, verbose=verbose))
         
-        #from time import time
-        #start_time = time()
-        
-        bounds = (((min_theta, None),) * len(warm_start_w))
-        
-        if global_optimize:
-            bounded_step = RandomDisplacementBounds(np.array([b[0] for b in bounds]), np.array([b[1] for b in bounds]))
-            # use the basin-hopping algorithm to find the global minimum
-            sol = basinhopping(objective_loss_theta, warm_start_w, niter=10, T=1.0, take_step=bounded_step,
-                               minimizer_kwargs={'method': opt_method,
-                                                 'args': (this_y_vec, this_mu, this_gamma_g, sigma2, nu_vec, rho, lambda_r, lasso_weight_vec, lambda_l2, hybrid_version, hv_x, hv_log_p, N),
-                                                 'bounds': bounds,
-                                                 'options': {'maxiter': 250, 'eps': theta_eps},
-                                                 'jac': True
-                                                 },
-                               disp=False)
-        else:
-            sol = minimize(objective_loss_theta, warm_start_w, args=(this_y_vec, this_mu, this_gamma_g, sigma2, nu_vec, rho, lambda_r, lasso_weight_vec, lambda_l2, hybrid_version, hv_x, hv_log_p, N),
-                       method=opt_method,
-                       bounds=bounds, options={'disp': False, 'maxiter': 250, 'eps': theta_eps}, jac=True)
-        
-        #print(f'spot {i:d} optimization finished in {sol.nit} iterations. Elapsed time: {time()-start_time:.2f} seconds.')
-        
-        if not global_optimize:
-            if sol.status != 0:
-                if verbose:
-                    # status 2: Maximum number of iterations has been exceeded
-                    print(f'[WARNING] w optimization in local model of spot {data["spot_names"][i]} not successful! Caused by: {sol.message}')
-        
-        solve_fail_flag = False
-        
-        if sum(sol.x) == 0:
-            print(f'###### Error: w optimization in local model of spot {data["spot_names"][i]} returns all 0s! ######')
-            solve_fail_flag = True
-            
-        if np.any(np.isnan(sol.x)):
-            print(f'###### Error: w optimization in local model of spot {data["spot_names"][i]} returns NaN value! ######')
-            solve_fail_flag = True
-           
-        if np.any(np.isinf(sol.x)):
-            print(f'###### Error: w optimization in local model of spot {data["spot_names"][i]} returns Infinite value! ######')
-            solve_fail_flag = True
-            
-        if solve_fail_flag:
-            # replace NaN or Infinite as 0
-            this_sol = np.nan_to_num(sol.x, nan=0.0, posinf=0.0, neginf=0.0)
-            if sum(this_sol) == 0:
-                # reset w to all elements equal
-                tmp_len = this_sol.shape[0]
-                this_sol = np.full((tmp_len,), 1.0/tmp_len) * this_warm_start_e_alpha
-                print('reset w to all elements identical')
-            else:
-                # renormalize to sum to 1
-                this_sol = this_sol / sum(this_sol)
-                print('repalce non-numeric value as 0 then re-normalize to sum to 1')
-        else:
-            this_sol = sol.x
-        
-        # transform back theta, adding non-present values
-        if theta_mask is None:
-            results.append(this_sol)
-        else:
-            this_sol_full = np.zeros((n_celltype,))
-            this_sol_full[this_present_celltype_index.flatten()] = this_sol
-            results.append(this_sol_full)
     
     # collect results: theta and e_alpha
     theta_results = np.zeros((n_spot, n_celltype, 1))
@@ -883,12 +962,12 @@ def update_sigma2(data, theta, e_alpha, gamma_g, sigma2, opt_method='L-BFGS-B', 
     
     
     if not global_optimize:
-        if sol.status != 0:
+        if not sol.success:
             if verbose:
                 print(f'[WARNING] sigma2 optimization in local model of all spots not successful! Caused by: {sol.message}')
     
     if not math.isfinite(sol.x[0]):
-        raise Exception('Error: sigma2 optimization in local model of all spots returns a non-finite value!')
+        raise Exception('[Error] sigma2 optimization in local model of all spots returns a non-finite value!')
         
     
     # the solution in x is a numpy array
@@ -947,5 +1026,333 @@ def adaptive_lasso(nu, rho, lambda_r=1.0, lasso_weight=None):
     
     # avoid negative values
     result[result<min_theta] = min_theta
+    
+    return result
+
+
+
+################################# code related to update theta by in Stage Two without ADMM #################################
+
+def fit_base_model_plus_laplacian(data, L, theta, e_alpha, gamma_g, sigma2,
+                                  lambda_r=None, lasso_weight=None,
+                                  hv_x=None, hv_log_p=None, theta_mask=None,
+                                  opt_method='L-BFGS-B', global_optimize=False, hybrid_version=True,
+                                  verbose=False):
+    """
+    fit base model plus Laplacian penalty, this function is to replace the whole ADMM framework in GLRM stage two
+    
+    Note: To keep consistent, the output of the fit result is still 3-Dimensional. The dimension transform will be performed outside this function if needed
+    
+    Parameters
+    ----------
+    data : Dict
+        a Dict contains all info need for modeling:
+            X: a 2-D numpy matrix of celltype specific marker gene expression (celltypes * genes).\n
+            Y: a 2-D numpy matrix of spatial gene expression (spots * genes).\n
+            A: a 2-D numpy matrix of Adjacency matrix (spots * spots), or is None. Adjacency matrix of spatial sptots (1: connected / 0: disconnected). All 0 in diagonal.\n
+            N: a 1-D numpy array of sequencing depth of all spots (length #spots). If it's None, use sum of observed marker gene expressions as sequencing depth.\n
+            non_zero_mtx: If it's None, then do not filter zeros during regression. If it's a bool 2-D numpy matrix (spots * genes) as False means genes whose nUMI=0 while True means genes whose nUMI>0 in corresponding spots. The bool indicators can be calculated based on either observerd raw nUMI counts in spatial data, or CVAE transformed nUMI counts.\n
+            spot_names: a list of string of spot barcodes. Only keep spots passed filtering.\n
+            gene_names: a list of string of gene symbols. Only keep actually used marker genes.\n
+            celltype_names: a list of string of celltype names.\n
+            initial_guess: initial guess of cell-type proportions of spatial spots.
+    L : scipy sparse matrix (spots * spots)
+        Laplacian matrix. Note the strenth lambda_g is already absorbed in the L
+    theta : 3-D numpy array (spots * celltypes * 1)
+        initial guess of theta (celltype proportion).
+    e_alpha : 1-D numpy array
+        initial guess of e_alpha (spot-specific effect).
+    gamma_g : 1-D numpy array
+        gene-specific platform effect for all genes.
+    sigma2 : float
+        initial guess of variance paramter of the lognormal distribution of ln(lambda). All genes and spots share the same variance.
+        it may not be updated during this optimization, i.e. sigma2 is treated as an already optimized value.
+    lambda_r : float, optional
+        strength for Adaptive Lasso penalty. The default is None here.
+    lasso_weight : 3-D numpy array (spots * celltypes * 1), optional
+        calculated weight for adaptive lasso. The default is None.
+    hv_x : 1-D numpy array, optional
+        data points served as x for calculation of probability density values. Only used for heavy-tail.
+    hv_log_p : 1-D numpy array, optional
+        log density values of normal distribution N(0, sigma^2) + heavy-tail. Only used for heavy-tail.
+    theta_mask : 3-D numpy array (spots * celltypes * 1), optional
+        mask for cell-type proportions (1: present, 0: not present). Only used for stage 2 theta optmization.
+    opt_method : string, optional
+        specify method used in scipy.optimize.minimize for local model fitting. The default is 'L-BFGS-B', a default method in scipy for optimization with bounds. Another choice would be 'SLSQP', a default method in scipy for optimization with constrains and bounds.
+    global_optimize : bool, optional
+        if is True, use basin-hopping algorithm to find the global minimum. The default is False.
+    hybrid_version : bool, optional
+        if True, use the hybrid_version of GLRM, i.e. in ADMM local model loss function optimization for w but adaptive lasso constrain on theta. If False, local model loss function optimization and adaptive lasso will on the same w. The default is True.
+    verbose : bool, optional
+        if True, print more information.
+
+    Returns
+    -------
+    Dict
+        estimated model coefficients, including:
+            theta : celltype proportions (#spots * #celltypes * 1)\n
+            e_alpha : spot-specific effect (1-D array with length #spot)\n
+            sigma2 : variance paramter of the lognormal distribution (float)\n
+            gamma_g : gene-specific platform effect for all genes (1-D array with length #gene)
+    """
+    
+    n_celltype = data['X'].shape[0]
+    n_spot = data['Y'].shape[0]
+    
+    from time import time
+    start_time = time()
+    
+    # NOTE input theta, e_alpha will NOT be changed inside the function
+    
+    # initialize x array for calculation of heavy-tail
+    if hv_x is None:
+        from local_fit_numba import z_hv
+        hv_x = z_hv.copy()
+    
+    if hv_log_p is None:
+        # initialize density values of heavy-tail with initial sigma^2
+        hv_log_p = generate_log_heavytail_array(hv_x, np.sqrt(sigma2))
+
+    assert theta_mask is not None
+    if verbose:
+        print('[HIGHLIGHT] set tighter bounds for proportion w values of NOT present cell types determined in Stage 1')
+    
+    assert lambda_r is None
+    assert lasso_weight is None
+    assert hybrid_version is True  # the optimization is on w, but the constrain is on theta
+    
+    
+    # prepare w, and 3D -> 1D
+    w0_list = []
+    bounds = []
+    
+    for i in range(n_spot):
+        # take the i-th spot
+        this_warm_start_theta = theta[i, :, 0]  # shape (n_celltype,)
+        this_theta_mask = theta_mask[i, :, 0]
+        
+        assert np.isclose(np.sum(this_warm_start_theta), 1.0, atol=1e-9), f"Spot {i}: sum={np.sum(this_warm_start_theta):.4g}"
+        assert len(this_warm_start_theta) == n_celltype
+        assert len(this_theta_mask) == n_celltype
+        
+        # per-cell-type-proportion bounds
+        # avoid [[min_theta, None]] * n_celltype, which will creates shared inner lists, when change one, all will changed simultaneously
+        # None means “no upper bound”
+        this_bounds = [[min_theta, None] for _ in range(n_celltype)]
+        
+        # for cell type not presented, we set a very tight bounds
+        for j in range(n_celltype):
+            if this_theta_mask[j] == 0:
+                # this cell type not present
+                this_bounds[j][1] = min_theta * 2
+        bounds.extend(this_bounds)
+        
+        # re-parametrization: multiply θ_i by e_alpha[i] to get w_i
+        w0_list.append(this_warm_start_theta * e_alpha[i])
+    
+    w0 = np.concatenate(w0_list, axis=0)  # shape (n_spot * n_celltype,)
+    bounds = tuple([tuple(x) for x in bounds])
+    
+    # Ensure symmetric Laplacian without densifying
+    if (L - L.T).nnz != 0:
+        raise ValueError("Laplacian L must be symmetric!")
+    
+    
+    # loss function
+    def loss_theta_L(w_vec, Y, mu, gamma_g, sigma2, hybrid_version, hv_x, hv_log_p, Ns, L):
+        '''
+        calculate loss function for updating theta (celltype proportion)
+        
+        the loss function contains two parts, sum of base model, defined for each spot separately; and the graph Laplacian penalty
+        
+        also return gradient respect to w
+        
+        1. for each spot, negative log-likelihood of the base model given observed data and initial parameter value. It sums across all genes. Then we sum it over all spots
+        
+        2. graph Laplacian penalty
+        
+        Parameters
+        ----------
+        w_vec : 1-D numpy array
+            e_alpha (spot-specific effect) * theta (celltype proportion) of all spots, flattened to 1D array.
+        Y : 2-D numpy array
+            observed gene counts of all spots (spots * genes).
+        mu : 2-D numpy matrix
+            celltype specific marker genes (celltypes * genes)
+        gamma_g : 1-D numpy array
+            gene-specific platform effect for all genes.
+        sigma2 : float
+            variance paramter of the lognormal distribution of ln(lambda). All gene share the same variance.
+        hybrid_version : bool, optional
+            if True, use the hybrid_version of GLRM, i.e. in ADMM local model loss function optimization for w but adaptive lasso constrain on theta. If False, local model loss function optimization and adaptive lasso will on the same w. The default is True.
+        hv_x : 1-D numpy array, optional
+            data points served as x for calculation of probability density values. Only used for heavy-tail.
+        hv_log_p : 1-D numpy array, optional
+            log density values of normal distribution N(0, sigma^2) + heavy-tail. Only used for heavy-tail.
+        Ns : 1-D numpy array
+            sequencing depth of all spots (length #spots). If is None, use sum(y_vec) instead.
+        
+        Returns
+        -------
+        a tuple (float, 1-D numpy array)
+            the loss function (base model loss + graph Laplacian loss) over all spots to update w (e_alpha*theta) + gradient vector
+        '''
+        
+        # first revert the w to spot * cell type
+        n_spot = Y.shape[0]
+        n_celltype = mu.shape[0]
+        
+        assert len(w_vec) == n_spot * n_celltype
+        
+        W = w_vec.reshape((n_spot, n_celltype)) # row-wise reshape
+        
+        base_model_loss = 0
+        grad_W = np.zeros((n_spot, n_celltype))   # preallocate gradient matrix
+        # re-construct theta from w, theta = w / sum(w)
+        Theta = np.zeros((n_spot, n_celltype))
+        
+        for i in range(n_spot):
+            this_w = W[i, :]
+            this_y = Y[i, :]
+                
+            # sequencing depth
+            if Ns is None:
+                N = None
+            else:
+                N = Ns[i]
+            
+            # return the loss function value and gradient for w in this spot i
+            cur_loss, cur_gradient = objective_loss_theta(this_w, this_y, mu, gamma_g, sigma2, nu_vec=None, rho=None, lambda_r=None, lasso_weight_vec=None, lambda_l2=None, hybrid_version=hybrid_version, hv_x=hv_x, hv_log_p=hv_log_p, N=N)
+            
+            # total loss is sum over all spots
+            base_model_loss += cur_loss
+            
+            # since each spot is independent in base model, the the gradient for this spot is only related to this spot, we can directly use it
+            grad_W[i, :] = cur_gradient
+            
+            # re-construct theta, we are sure sum will >0, so no need to add a smalle value to avoid divided by zero; rather add a small value will break the invariance in gradient calculation, leading to incorrect results
+            tmp_sum = np.sum(this_w)
+            Theta[i, :] = this_w / tmp_sum
+        
+        
+        assert hybrid_version is True  # constrain on theta
+
+        # Note L is a SciPy sparse matrix, and lambda_g is already absorbed in the L
+        # @ is matrix multiply, * is Element-wise Multiplication
+        # Theta: n_spot * n_celltype
+        # loss is tr(Θ^⊤*L*Θ)
+        graph_loss = np.sum(Theta * (L @ Theta))  # == tr(Theta.T @ L @ Theta)
+        
+        # we need to return gradient respect to w, so use chain rule df/dw = df/dθ * dθ/dw
+        # df/dθ = 2LΘ, dθ/dw = 1/sum(w) - w/(sum(w)^2)
+        # for each row i:
+        # ∇_{w_i} f = g_i / s_i  -  ( (w_i · g_i) / s_i^2 ) * 1
+        g = 2 * L @ Theta # (n,k)
+        s = np.sum(W, axis=1, keepdims=True)  # (n,1)
+        # rowwise corrections
+        wg = np.sum(W * g, axis=1, keepdims=True)  # (n,1), row-wise inner product w·g
+        graph_grad_W = (g / s) - (wg / (s ** 2))  # broadcast-safe, (n,k)
+        
+        loss = base_model_loss + graph_loss
+        grad = grad_W + graph_grad_W
+        # reshape grad to vector
+        grad_vec = grad.flatten(order='C') # row-wise
+        
+        return loss, grad_vec
+
+    
+    # start optimization
+    # call minimize function to solve w (e_alpha*theta)
+    # bounds : tuple of tuples
+    #    sequence of (min, max) pairs for each element in w_vec
+    # min not set as 0 to avoid divided by 0 or log(0)
+    # if jac is a Boolean and is True, fun is assumed to return a tuple (f, g) containing the objective function and the gradient
+    sol = minimize(loss_theta_L, w0, args=(data["Y"], data["X"], gamma_g, sigma2, hybrid_version, hv_x, hv_log_p, data["N"], L),
+               method=opt_method,
+               bounds=bounds,
+               options={'disp': False, 'maxiter': 250, 'eps': theta_eps}, jac=True)
+    
+    
+    # sol would be (nk,) array, change to n*k
+    if sol.success:
+        if verbose:
+            print(f'w optimization in Stage 2 successful in {sol.nit} iterations')
+            # Ref: status 2 - Maximum number of iterations has been exceeded
+    else:
+        if verbose:
+            print(f'[WARNING] w optimization in Stage 2 not successful! Caused by: {sol.message}')
+    
+    sol_W = np.reshape(sol.x, (n_spot, n_celltype)) # row-wise reshape
+    sol_W_cor = np.zeros((n_spot, n_celltype))
+    
+    for i in range(n_spot):
+        solve_fail_flag = False
+        this_sol = sol_W[i, ].copy()
+    
+        if sum(this_sol) == 0:
+            if verbose:
+                print(f'###### [Error] w optimization in STAGE TWO of spot {data["spot_names"][i]} returns all 0s! ######')
+            solve_fail_flag = True
+        
+        if np.any(np.isnan(this_sol)):
+            if verbose:
+                print(f'###### [Error] w optimization in STAGE TWO of spot {data["spot_names"][i]} returns NaN value! ######')
+            solve_fail_flag = True
+       
+        if np.any(np.isinf(this_sol)):
+            if verbose:
+                print(f'###### [Error] w optimization in STAGE TWO of spot {data["spot_names"][i]} returns Infinite value! ######')
+            solve_fail_flag = True
+        
+        if solve_fail_flag:
+            # replace NaN or Infinite as 0
+            this_sol = np.nan_to_num(this_sol, nan=0.0, posinf=0.0, neginf=0.0)
+            if verbose:
+                print('repalce non-numeric value as 0')
+            # NOTE this is w, no need to sum to 1
+            
+            if sum(this_sol) == 0:
+                # reset w to all elements equal
+                tmp_len = this_sol.shape[0]
+                this_sol = np.full((tmp_len,), 1.0/tmp_len) * e_alpha[i]
+                if verbose:
+                    print('[WARNING] reset w to all elements identical!')
+    
+        # set w values at boundary to 0; note to allow a tolerance
+        tmp_ind = (this_sol > 0) & (this_sol <= min_theta * 5)
+        if tmp_ind.any():
+            this_sol[tmp_ind] = 0
+            # NOTE this is w, no need to sum to 1
+    
+        sol_W_cor[i, ] = this_sol
+
+
+    # collect results: theta and e_alpha
+    theta_results = np.zeros((n_spot, n_celltype, 1))
+    e_alpha_results = []
+
+    for i in range(n_spot):
+        # extract theta and e_alpha
+        this_w_result = sol_W_cor[i, ]
+        tmp_e_alpha = np.sum(this_w_result)
+        tmp_theta = this_w_result / tmp_e_alpha
+        # change dimension back
+        theta_results[i, :, :] = np.reshape(tmp_theta, (n_celltype, 1))
+        e_alpha_results.append(tmp_e_alpha)
+
+    e_alpha_results = np.array(e_alpha_results)
+    
+    
+    # construct result, DO NOT change theta back to 2-D array
+    # the dimension transforming is performed outside this function is needed
+    result = {
+            'theta': theta_results,
+            'e_alpha': e_alpha_results,
+            'sigma2': sigma2,
+            'gamma_g': gamma_g
+            }
+    
+    if verbose:
+        print(f'Optimization with graph Laplacian penalty finished. Elapsed time: {(time()-start_time)/60.0:.2f} minutes.\n')
     
     return result

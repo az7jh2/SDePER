@@ -10,7 +10,9 @@ this script stores functions of cross-validation to find optimal values for hype
     2. lambda_g: for graph edge weight, will affect the Laplacian Matrix
     
 in k-fold cross-validation, we random subset the GENEs, then predict the gene expression in validation fold
-the performance metric is RMSE of predicted gene expressions in validation fold
+the performance metric is RMSE or negative log-likelihood of predicted gene expressions in validation fold
+
+UPDATE: we add BIC for lambda_r selection
 """
 
 
@@ -20,7 +22,7 @@ from scipy import sparse
 from math import floor
 from time import time
 from admm_fit import one_admm_fit
-from local_fit_numba import update_theta, hv_wrapper
+from local_fit_numba import update_theta, hv_wrapper, fit_base_model_plus_laplacian, optimize_one_theta
 from utils import reportRMSE, calcRMSE
 from config import print
 
@@ -182,8 +184,8 @@ def cv_find_lambda_r(data, mle_theta, mle_e_alpha, gamma_g, sigma2, lasso_weight
     
     start_time = time()
     
-    # add 0 to candidate list
-    candidate_list = [0] + candidate_list
+    # add 0 to candidate list; original list NOT affected
+    candidate_list = [0] + candidate_list[:]
      
     n_spot, n_gene = data['Y'].shape
     
@@ -229,6 +231,7 @@ def cv_find_lambda_r(data, mle_theta, mle_e_alpha, gamma_g, sigma2, lasso_weight
             train_data['X'] = data['X'][:, train_gene_idx].copy()
             train_data['Y'] = data['Y'][:, train_gene_idx].copy()
             train_data['N'] = data['N'].copy()
+            train_data['spot_names'] = data['spot_names'][:]  # copy list for safe
             
             if data['non_zero_mtx'] is None:
                 train_data['non_zero_mtx'] = None
@@ -241,7 +244,8 @@ def cv_find_lambda_r(data, mle_theta, mle_e_alpha, gamma_g, sigma2, lasso_weight
             
             # update theta
             if use_admm:
-                this_result = one_admm_fit(train_data, L, mle_theta, mle_e_alpha, train_gamma_g, sigma2,
+                this_result = one_admm_fit(train_data, L, mle_theta.copy(), mle_e_alpha.copy(),
+                                           train_gamma_g, sigma2,
                                            lambda_r=lambda_r, lasso_weight=lasso_weight,
                                            hv_x=hv_x, hv_log_p=hv_log_p, theta_mask=None,
                                            opt_method=opt_method, global_optimize=False, hybrid_version=hybrid_version,
@@ -250,7 +254,8 @@ def cv_find_lambda_r(data, mle_theta, mle_e_alpha, gamma_g, sigma2, lasso_weight
                 e_alpha = this_result['e_alpha']
                 
             else:
-                theta, e_alpha = update_theta(train_data, mle_theta, mle_e_alpha, train_gamma_g, sigma2,
+                theta, e_alpha = update_theta(train_data, mle_theta.copy(), mle_e_alpha.copy(),
+                                              train_gamma_g, sigma2,
                                               lambda_r=lambda_r, lasso_weight=lasso_weight,
                                               hv_x=hv_x, hv_log_p=hv_log_p, theta_mask=None,
                                               global_optimize=False, hybrid_version=hybrid_version, opt_method=opt_method,
@@ -298,9 +303,9 @@ def cv_find_lambda_r(data, mle_theta, mle_e_alpha, gamma_g, sigma2, lasso_weight
         optimal_idx = avg_rmse_list.index(min(avg_rmse_list))
     
     if use_likelihood:
-        print(f'find optimal lambda_r {candidate_list[optimal_idx]:.3f} with average negative log-likelihood {avg_rmse_list[optimal_idx]:.4f} by {k} fold cross-validation. Elapsed time: {(time()-start_time)/60.0:.2f} minutes.\n')
+        print(f'find optimal lambda_r {candidate_list[optimal_idx]:.3f} with average negative log-likelihood {avg_rmse_list[optimal_idx]:.4f} by {k} fold cross-validation. Elapsed time: {(time()-start_time)/60.0:.2f} minutes.')
     else:
-        print(f'find optimal lambda_r {candidate_list[optimal_idx]:.3f} with average RMSE {avg_rmse_list[optimal_idx]:.4f} by {k} fold cross-validation. Elapsed time: {(time()-start_time)/60.0:.2f} minutes.\n')
+        print(f'find optimal lambda_r {candidate_list[optimal_idx]:.3f} with average RMSE {avg_rmse_list[optimal_idx]:.4f} by {k} fold cross-validation. Elapsed time: {(time()-start_time)/60.0:.2f} minutes.')
         
     # draw plot
     if diagnosis:
@@ -318,7 +323,7 @@ def cv_find_lambda_r(data, mle_theta, mle_e_alpha, gamma_g, sigma2, lasso_weight
     
     
     
-def cv_find_lambda_g(data, L, stage1_theta, stage1_e_alpha, theta_mask, gamma_g, sigma2, candidate_list, hybrid_version=True, opt_method='L-BFGS-B', hv_x=None, hv_log_p=None, use_admm=True, use_likelihood=True, k=5, diagnosis=False):
+def cv_find_lambda_g(data, L, stage1_theta, stage1_e_alpha, theta_mask, gamma_g, sigma2, candidate_list, hybrid_version=True, opt_method='L-BFGS-B', hv_x=None, hv_log_p=None, use_admm=False, use_likelihood=True, k=5, diagnosis=False):
     '''
     find optimal value for hyper-parameter lambda_g by k fold cross-validation
     
@@ -358,7 +363,7 @@ def cv_find_lambda_g(data, L, stage1_theta, stage1_e_alpha, theta_mask, gamma_g,
     hv_log_p : 1-D numpy array, optional
         log density values of normal distribution N(0, sigma^2) + heavy-tail. Only used for heavy-tail.
     use_admm : bool, optional
-        whether use ADMM iteration or directly use Adative Lasso loss function. The default is True, i.e. use ADMM in cross-validation.
+        whether use ADMM iteration or directly use Laplacian loss function. The default is False, i.e. NOT use ADMM in cross-validation.
     use_likelihood : bool, optional
         whether use negative log-likelihood as performance metric in cross-validation. The default is True, if False use RMSE of predicted gene expression.
     k : int, optional
@@ -375,15 +380,15 @@ def cv_find_lambda_g(data, L, stage1_theta, stage1_e_alpha, theta_mask, gamma_g,
     print('\nStart cross-validation for hyper-parameter lambda_g...')
     
     if use_admm:
-        print('still use ADMM even NO Graph Laplacian constrain (lambda_g=0)')
+        print('still use ADMM even low speed')
     else:
-        print('directly estimate theta by Adaptive Lasso loss function when NO Graph Laplacian constrain (lambda_g=0)!')
+        print('directly estimate theta by graph Laplacian loss function!')
     
     
     start_time = time()
     
-    # add 0 to candidate list
-    candidate_list = [0] + candidate_list
+    # add 0 to candidate list; original list NOT affected
+    candidate_list = [0] + candidate_list[:]
     
     n_spot, n_gene = data['Y'].shape
     
@@ -442,6 +447,7 @@ def cv_find_lambda_g(data, L, stage1_theta, stage1_e_alpha, theta_mask, gamma_g,
             train_data['X'] = data['X'][:, train_gene_idx].copy()
             train_data['Y'] = data['Y'][:, train_gene_idx].copy()
             train_data['N'] = data['N'].copy()
+            train_data['spot_names'] = data['spot_names'][:]  # copy list for safe
             
             if data['non_zero_mtx'] is None:
                 train_data['non_zero_mtx'] = None
@@ -453,29 +459,30 @@ def cv_find_lambda_g(data, L, stage1_theta, stage1_e_alpha, theta_mask, gamma_g,
             train_gamma_g = gamma_g[train_gene_idx].copy()
             
             # update theta
-            if lambda_g > 0:
-                this_result = one_admm_fit(train_data, lambda_gL, start_theta, start_e_alpha, train_gamma_g, sigma2,
-                                           lambda_r=0, lasso_weight=None,
-                                           hv_x=hv_x, hv_log_p=hv_log_p, theta_mask=theta_mask,
-                                           opt_method=opt_method, global_optimize=False, hybrid_version=hybrid_version,
-                                           verbose=False)
+            if lambda_g >= 0:
+                if use_admm:
+                    this_result = one_admm_fit(train_data, lambda_gL,
+                                               start_theta.copy(), start_e_alpha.copy(),
+                                               train_gamma_g, sigma2,
+                                               lambda_r=0, lasso_weight=None,
+                                               hv_x=hv_x, hv_log_p=hv_log_p, theta_mask=theta_mask,
+                                               opt_method=opt_method, global_optimize=False,
+                                               hybrid_version=hybrid_version,
+                                               verbose=False)
+                else:
+                    this_result = fit_base_model_plus_laplacian(train_data, lambda_gL,
+                                                                start_theta.copy(), start_e_alpha.copy(),
+                                                                train_gamma_g, sigma2,
+                                                                lambda_r=None, lasso_weight=None,
+                                                                hv_x=hv_x, hv_log_p=hv_log_p,
+                                                                theta_mask=theta_mask,
+                                                                opt_method=opt_method,
+                                                                global_optimize=False,
+                                                                hybrid_version=hybrid_version,
+                                                                verbose=False)
                 theta = this_result['theta']
                 e_alpha = this_result['e_alpha']
-                
-            elif lambda_g == 0:
-                if use_admm:
-                    this_result = one_admm_fit(train_data, lambda_gL, start_theta, start_e_alpha, train_gamma_g, sigma2,
-                                           lambda_r=0, lasso_weight=None,
-                                           hv_x=hv_x, hv_log_p=hv_log_p, theta_mask=theta_mask,
-                                           opt_method=opt_method, global_optimize=False, hybrid_version=hybrid_version,
-                                           verbose=False)
-                    theta = this_result['theta']
-                    e_alpha = this_result['e_alpha']
-                else:
-                    theta, e_alpha = update_theta(train_data, start_theta, start_e_alpha, train_gamma_g, sigma2,
-                                              hv_x=hv_x, hv_log_p=hv_log_p, theta_mask=theta_mask,
-                                              global_optimize=False, hybrid_version=hybrid_version, opt_method=opt_method,
-                                              verbose=False)
+
             else:
                 raise Exception(f'lambda_g can not be negative! currently it is {lambda_g}')
             
@@ -521,9 +528,9 @@ def cv_find_lambda_g(data, L, stage1_theta, stage1_e_alpha, theta_mask, gamma_g,
         optimal_idx = avg_rmse_list.index(min(avg_rmse_list))
     
     if use_likelihood:
-        print(f'find optimal lambda_g {candidate_list[optimal_idx]:.3f} with average negative log-likelihood {avg_rmse_list[optimal_idx]:.4f} by {k} fold cross-validation. Elapsed time: {(time()-start_time)/60.0:.2f} minutes.\n')
+        print(f'find optimal lambda_g {candidate_list[optimal_idx]:.3f} with average negative log-likelihood {avg_rmse_list[optimal_idx]:.4f} by {k} fold cross-validation. Elapsed time: {(time()-start_time)/60.0:.2f} minutes.')
     else:
-        print(f'find optimal lambda_g {candidate_list[optimal_idx]:.3f} with average RMSE {avg_rmse_list[optimal_idx]:.4f} by {k} fold cross-validation. Elapsed time: {(time()-start_time)/60.0:.2f} minutes.\n')
+        print(f'find optimal lambda_g {candidate_list[optimal_idx]:.3f} with average RMSE {avg_rmse_list[optimal_idx]:.4f} by {k} fold cross-validation. Elapsed time: {(time()-start_time)/60.0:.2f} minutes.')
         
     # draw plot
     if diagnosis:
@@ -538,3 +545,91 @@ def cv_find_lambda_g(data, L, stage1_theta, stage1_e_alpha, theta_mask, gamma_g,
     
     
     return candidate_list[optimal_idx]
+
+
+
+def BIC_find_lambda_r_one_spot(mu, y_vec, N, spot_name, mle_theta, mle_e_alpha, gamma_g, sigma2, lasso_weight, candidate_list, hybrid_version=True, opt_method='L-BFGS-B', hv_x=None, hv_log_p=None, verbose=False):
+    '''
+    find optimal value for hyper-parameter lambda_r by BIC
+    
+    Parameters
+    ----------
+    mu : 2-D numpy matrix
+        matrix of celltype specific marker gene expression (celltypes * genes).
+    y_vec : 1-D numpy array
+        spatial gene expression (length #genes).
+    N : int or None
+        sequencing depth of this spot. If it's None, use sum of observed marker gene expressions as sequencing depth.
+    spot_name : string
+        name of this spot.
+    mle_theta : 1-D numpy array (length #celltypes)
+        estimated theta (celltype proportion) by MLE.
+    mle_e_alpha : float
+        estimated e_alpha by MLE.
+    gamma_g : 1-D numpy array
+        gene-specific platform effect for all genes.
+    sigma2 : float
+        variance paramter of the lognormal distribution of ln(lambda). All gene share the same variance.
+    lasso_weight : 1-D numpy array (length #celltypes)
+        weight of Adaptive Lasso, 1 ./ MLE theta
+    candidate_list : list
+        candidates for the hyper-parameter
+    hybrid_version : bool, optional
+        if True, use the hybrid_version of GLRM, i.e. in ADMM local model loss function optimization for w but adaptive lasso constrain on theta. If False, local model loss function optimization and adaptive lasso will on the same w. The default is True.
+    opt_method : string, optional
+        specify method used in scipy.optimize.minimize for local model fitting. The default is 'L-BFGS-B', a default method in scipy for optimization with bounds. Another choice would be 'SLSQP', a default method in scipy for optimization with constrains and bounds.
+    hv_x : 1-D numpy array, optional
+        data points served as x for calculation of probability density values. Only used for heavy-tail.
+    hv_log_p : 1-D numpy array, optional
+        log density values of normal distribution N(0, sigma^2) + heavy-tail. Only used for heavy-tail.
+    verbose : bool, optional
+        if True, print more information.
+        
+    Returns
+    -------
+    tuple of (float, 1-D numpy array)
+        optimal lambda_r value and corresponding optimized theta (for refit)
+    '''
+    
+    start_time = time()
+    
+    n_gene = len(y_vec)
+    
+    # add 0 to candidate list; original list NOT affected
+    candidate_list = [0] + candidate_list[:]
+    
+    # for each candidate value, start BIC calculation
+    bic_list = []
+    solution_list = []
+    
+    for lambda_r in candidate_list:
+        # update theta
+        w_result = optimize_one_theta(mu.copy(), y_vec.copy(), N, mle_theta.copy(), mle_e_alpha, gamma_g, sigma2, spot_name, nu_vec=None, rho=None, lambda_r=lambda_r, lasso_weight_vec=lasso_weight, lambda_l2=None, global_optimize=False, hybrid_version=hybrid_version, opt_method=opt_method, hv_x=hv_x, hv_log_p=hv_log_p, this_theta_mask=None, skip_opt=True, verbose=False)
+        
+        # get theta and e_alpha; NOTE we already set small theta to 0 before return results
+        e_alpha = np.sum(w_result)
+        theta = w_result / e_alpha
+
+        # evaluate BIC
+        # negative log-likelihood
+        likelihood_part = hv_wrapper(w_result, y_vec, mu, gamma_g, sigma2, hv_x, hv_log_p, N)
+        # degree of freedom, non zeros minus 1, note there is at least one non-zero in theta
+        dof = np.count_nonzero(theta) - 1
+        # note here the sample size is number of genes
+        bic = dof * np.log(n_gene) + 2 * likelihood_part
+        
+        bic_list.append(bic)
+        # NOTE here we return the theta NOT w
+        solution_list.append(theta.copy())
+        
+        # NOTE we do not check early stop
+        # as we only get a gain on total BIC when we forced addtional theta to 0
+        # L1 shrinkage on theta but not to 0 will only cause negative likelihood larger (worse)
+
+    # find the optimal value with smallest BIC, only record the first occurence which corresponding to smaller lambda_r
+    optimal_idx = bic_list.index(min(bic_list))
+    
+    if verbose:
+        print(f'Spot {spot_name}: find optimal lambda_r {candidate_list[optimal_idx]:.3f} with BIC {bic_list[optimal_idx]:.4f} in {len(bic_list)} trials. Elapsed time: {(time()-start_time):.2f} seconds.')
+
+    return candidate_list[optimal_idx], solution_list[optimal_idx]
