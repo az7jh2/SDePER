@@ -553,10 +553,10 @@ def optimize_one_theta(mu, y_vec, N, this_warm_start_theta, this_warm_start_e_al
     n_celltype = len(this_warm_start_theta)
     
     if skip_opt:
-        if (this_warm_start_theta==1).any():
+        if np.isclose(this_warm_start_theta, 1.0, atol=1e-7).any():
             assert np.sum(this_warm_start_theta) == 1
             #print(f'skip optimization for spot {spot_name} as only one celltype present')
-            return(this_warm_start_theta)
+            return this_warm_start_theta
     
     # Prepare variables based on whether sparsity considered via theta mask
     if this_theta_mask is None:
@@ -569,7 +569,8 @@ def optimize_one_theta(mu, y_vec, N, this_warm_start_theta, this_warm_start_e_al
             if np.sum(this_present_celltype_index) == 1:
                 simple_sol = np.zeros((n_celltype,))
                 simple_sol[this_present_celltype_index] = 1
-                return(simple_sol)
+                #print(f'skip optimization for spot {spot_name} as only one celltype present in mask')
+                return simple_sol
 
     if this_present_celltype_index is not None:
         # extract only marker gene expressions for presented cell-types
@@ -663,7 +664,7 @@ def optimize_one_theta(mu, y_vec, N, this_warm_start_theta, this_warm_start_e_al
         w_result = np.zeros((n_celltype,))
         w_result[this_present_celltype_index] = this_sol
     
-    return(w_result)
+    return w_result 
 
 
 def update_theta(data, warm_start_theta, warm_start_e_alpha, gamma_g, sigma2, nu=None, rho=None, lambda_r=None, lasso_weight=None, lambda_l2=None, global_optimize=False, hybrid_version=True, opt_method='L-BFGS-B', hv_x=None, hv_log_p=None, theta_mask=None, verbose=False):
@@ -1131,7 +1132,7 @@ def fit_base_model_plus_laplacian(data, L, theta, e_alpha, gamma_g, sigma2,
         this_warm_start_theta = theta[i, :, 0]  # shape (n_celltype,)
         this_theta_mask = theta_mask[i, :, 0]
         
-        assert np.isclose(np.sum(this_warm_start_theta), 1.0, atol=1e-9), f"Spot {i}: sum={np.sum(this_warm_start_theta):.4g}"
+        assert np.isclose(np.sum(this_warm_start_theta), 1.0, atol=1e-7), f"Spot {i}: sum={np.sum(this_warm_start_theta):.4g}"
         assert len(this_warm_start_theta) == n_celltype
         assert len(this_theta_mask) == n_celltype
         

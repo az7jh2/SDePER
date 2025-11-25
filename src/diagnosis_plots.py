@@ -624,13 +624,13 @@ def diagnosisParamsTuning(x, y, optimal_idx, x_label, y_label):
     
     sns.set()
     
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=(6.4*2, 4))
     ax.plot(x[:len(y)], y, marker='o')
     
     # if the range of the x-axis exceeds 100 (where the ratio of the largest to smallest value is greater than 100), we utilize a logarithmic scale for the x-axis in the plot.
     # log scale do not support 0, so use symlog
     # "linear threshold" determines the range around zero within which the scale will be linear ranther than instead of logarithmic to avoid distortion that occurs with logarithmic scaling near zero and make the plot more readable
-    if x[-1] / x[0] > 100:
+    if x[-1] / (x[0] + 1e-6) > 100:
         ax.set_xscale('symlog', linthresh=x[1])
     
     ax.set_xticks(x)
@@ -646,7 +646,7 @@ def diagnosisParamsTuning(x, y, optimal_idx, x_label, y_label):
 
 
 
-def diagnosisParamsSpotwiseLambdarTuning(x):
+def diagnosisParamsSpotwiseLambdarTuning(x, strategy):
     '''
     generate histogram plot show optimal lambda_r in hyper parameter tuning by BIC
 
@@ -654,6 +654,8 @@ def diagnosisParamsSpotwiseLambdarTuning(x):
     ----------
     x : list
         a list of optimal lambda_r
+    strategy : string
+        the used strategy for tuning lambda_r
 
     Returns
     -------
@@ -672,7 +674,7 @@ def diagnosisParamsSpotwiseLambdarTuning(x):
     ax.set_ylabel('Count')
         
     fig.tight_layout()
-    fig.savefig(os.path.join(diagnosis_path, 'GLRM_params_tuning', 'tuning_lambda_r_by_BIC.png'))
+    fig.savefig(os.path.join(diagnosis_path, 'GLRM_params_tuning', f'tuning_lambda_r_by_{strategy}.png'))
     plt.close()
 
 

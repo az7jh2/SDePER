@@ -17,7 +17,7 @@ from local_fit_numba import update_theta, update_sigma2, fit_base_model_plus_lap
 from admm_fit import one_admm_fit
 import scipy.sparse as sparse
 from utils import reparameterTheta
-from hyper_parameter_optimization import cv_find_lambda_r, cv_find_lambda_g, BIC_find_lambda_r_one_spot
+from hyper_parameter_optimization import cv_find_lambda_r, cv_find_lambda_g, BIC_find_lambda_r_one_spot, BIC_find_theta_subset_one_spot
 from config import min_val, print
 
 
@@ -225,6 +225,8 @@ def fit_stage1_spotwise_lambda_r(data, warm_start_theta, warm_start_e_alpha, gam
     
     UPDATE: here we assume the hyperparameter lambda_r for Adaptive Lasso is spot-wise, i.e. for each spot, we search for the optimal lambda_r, then fit the model
     
+    UPDATE2: we apply Nested Subset Selection Strategy, thus no lambda_r anymore
+    
     we assume 
     
         ln(lambda) = alpha + gamma_g + ln(sum(theta*mu_X)) + epsilon
@@ -282,8 +284,8 @@ def fit_stage1_spotwise_lambda_r(data, warm_start_theta, warm_start_e_alpha, gam
         log density values of normal distribution N(0, sigma^2) + heavy-tail. Only used for heavy-tail.
     verbose : bool, optional
         if True, print more information.
-    diagnosis : bool
-        if True save more information to files for diagnosis CVAE and hyper-parameter selection
+    diagnosis : bool, optional
+        if True print more information for diagnosis of hyper-parameter selection.
         
     Returns
     -------
@@ -298,11 +300,33 @@ def fit_stage1_spotwise_lambda_r(data, warm_start_theta, warm_start_e_alpha, gam
     n_celltype = data["X"].shape[0]
     n_spot = data["Y"].shape[0]
     
+    # strategy includes AIC, BIC or cross-validation for lambda_r tunning, or directly subset selection by AIC or BIC
+    strategy = 'AIC'
+    
+    if strategy == 'BIC':
+        print('[HIGHLIGHT] use BIC to select hyperparameter lambda_r in adaptive Lasso')
+        use_AIC = False
+    elif strategy == 'AIC':
+        print('[HIGHLIGHT] use AIC to select hyperparameter lambda_r in adaptive Lasso')
+        use_AIC = True
+    elif strategy == 'CV':
+        print('[HIGHLIGHT] use cross-validation to select hyperparameter lambda_r in adaptive Lasso')
+    elif strategy == 'subset-BIC':
+        print('[HIGHLIGHT] use Nested Subset Selection Strategy with BIC for presented cell type identification')
+        use_AIC = False
+    elif strategy == 'subset-AIC':
+        print('[HIGHLIGHT] use Nested Subset Selection Strategy with AIC for presented cell type identification')
+        use_AIC = True
+    else:
+        raise Exception(f'Unknown strategy in Stage 1: {strategy}!')
+    
     # NOTE input warm_start_theta, warm_start_e_alpha will NOT be changed inside the function
     
     # prepare parameter tuples for parallel computing
-    results = []
-    if isinstance(lambda_r, list):
+    theta_results = []
+    e_alpha_results = []
+    
+    if isinstance(lambda_r, list) and diagnosis:
         lambda_r_list = []
     
     prev_percent = -1
@@ -321,7 +345,7 @@ def fit_stage1_spotwise_lambda_r(data, warm_start_theta, warm_start_e_alpha, gam
 
         y_vec = data["Y"][i, :].copy()
         mu = data["X"].copy()
-
+        
         lasso_weight_vec = lasso_weight[i, :, :].copy().flatten()
        
         if data["N"] is None:
@@ -341,14 +365,86 @@ def fit_stage1_spotwise_lambda_r(data, warm_start_theta, warm_start_e_alpha, gam
             this_gamma_g = gamma_g[non_zero_gene_ind].copy()
             this_mu = mu[:, non_zero_gene_ind]
         
+        this_theta_result = None
+        this_e_alpha_result = None
+        
         # first determine whether need to tune hyperparameter lambda_r
         if isinstance(lambda_r, list):
             if verbose:
-                print(f'{i}th spot {this_spot_name} hyper-parameter for Adaptive Lasso: use BIC criteria to find the optimal value from {len(lambda_r)} candidates...')
-            # NOTE returned theta NOT w
-            best_lambda_r, tmp_theta = BIC_find_lambda_r_one_spot(this_mu.copy(), this_y_vec.copy(), N, this_spot_name, this_warm_start_theta.copy(), this_warm_start_e_alpha, this_gamma_g, sigma2, lasso_weight_vec.copy(), lambda_r, hybrid_version=hybrid_version, opt_method=opt_method, hv_x=hv_x, hv_log_p=hv_log_p, verbose=False)
+                print(f'{i}th spot {this_spot_name} hyper-parameter for Adaptive Lasso: use {strategy} criteria to find the optimal value from {len(lambda_r)} candidates...')
+                
+            if (strategy == 'BIC') or (strategy == 'AIC'):
+                # NOTE returned theta NOT w
+                best_lambda_r, tmp_theta = BIC_find_lambda_r_one_spot(this_mu.copy(), this_y_vec.copy(), N, this_spot_name, this_warm_start_theta.copy(), this_warm_start_e_alpha, this_gamma_g, sigma2, lasso_weight_vec.copy(), lambda_r, hybrid_version=hybrid_version, opt_method=opt_method, hv_x=hv_x, hv_log_p=hv_log_p, use_AIC=use_AIC, reinitialize_theta=False, verbose=verbose)
+                
+                if isinstance(lambda_r, list) and diagnosis:
+                    lambda_r_list.append({'spot': this_spot_name, 'optimal_lambda_r': best_lambda_r})
+                
+                # get non-zero cell types then refit; NOTE we set a min_theta in optimization to avoid theta as 0
+                # and before return result, we already set them back to 0
+                # binary theta by threshold to get a mask (1: present, 0: not present)
+                tmp_theta_mask = np.zeros(tmp_theta.shape, dtype='int')
+                tmp_theta_mask[tmp_theta > 0] = 1
+                
+                # refit
+                this_w = optimize_one_theta(this_mu.copy(), this_y_vec.copy(), N, this_warm_start_theta.copy(), this_warm_start_e_alpha, this_gamma_g, sigma2, this_spot_name, nu_vec=None, rho=None, lambda_r=None, lasso_weight_vec=None, lambda_l2=None, global_optimize=global_optimize, hybrid_version=hybrid_version, opt_method=opt_method, hv_x=hv_x, hv_log_p=hv_log_p, this_theta_mask=tmp_theta_mask, skip_opt=True, verbose=False)
+                # get theta and e_alpha
+                this_e_alpha_result = np.sum(this_w)
+                this_theta_result = this_w / this_e_alpha_result
+                
             
-            lambda_r_list.append({'spot': this_spot_name, 'optimal_lambda_r': best_lambda_r})
+            elif (strategy == 'subset-BIC') or (strategy == 'subset-AIC'):
+                # start Nested Subset Selection Strategy
+                # NOTE returned results are theta and e_alpha separately
+                this_theta_result, this_e_alpha_result = BIC_find_theta_subset_one_spot(this_mu.copy(), this_y_vec.copy(), N, this_spot_name, this_warm_start_theta.copy(), this_warm_start_e_alpha, this_gamma_g, sigma2, hybrid_version=hybrid_version, opt_method=opt_method, hv_x=hv_x, hv_log_p=hv_log_p, use_AIC=use_AIC, reinitialize_theta=False, verbose=verbose)
+            
+            
+            elif strategy == 'CV':
+                # construct data dict with only one spot
+                if data['non_zero_mtx'] is None:
+                    this_spot_nonzero_mtx = None
+                else:
+                    this_spot_nonzero_mtx = data['non_zero_mtx'][i, :]
+                    this_spot_nonzero_mtx = this_spot_nonzero_mtx.reshape((1, len(this_spot_nonzero_mtx)))
+                
+                onespot_data = {'X': this_mu,
+                                'Y': this_y_vec.reshape((1, len(this_y_vec))),
+                                'N': np.array([N]),
+                                'non_zero_mtx': this_spot_nonzero_mtx,
+                                'spot_names': [this_spot_name]
+                                }
+                reshaped_theta = this_warm_start_theta.reshape((1, n_celltype, 1))
+                reshaped_e_alpha = np.array([this_warm_start_e_alpha])
+                reshaped_lasso_weight = lasso_weight_vec.reshape((1, n_celltype, 1))
+
+                best_lambda_r = cv_find_lambda_r(onespot_data, reshaped_theta.copy(),
+                                                 reshaped_e_alpha.copy(), gamma_g.copy(), sigma2,
+                                                 reshaped_lasso_weight.copy(), lambda_r,
+                                                 hybrid_version=hybrid_version, opt_method=opt_method,
+                                                 hv_x=hv_x, hv_log_p=hv_log_p,
+                                                 use_admm=False, use_likelihood=True,
+                                                 k=5, diagnosis=False, verbose=verbose)
+                
+                if isinstance(lambda_r, list) and diagnosis:
+                    lambda_r_list.append({'spot': this_spot_name, 'optimal_lambda_r': best_lambda_r})
+                
+                # fit with best_lambda_r
+                tmp_w = optimize_one_theta(this_mu.copy(), this_y_vec.copy(), N, this_warm_start_theta.copy(), this_warm_start_e_alpha, this_gamma_g, sigma2, this_spot_name, nu_vec=None, rho=None, lambda_r=best_lambda_r, lasso_weight_vec=lasso_weight_vec.copy(), lambda_l2=None, global_optimize=global_optimize, hybrid_version=hybrid_version, opt_method=opt_method, hv_x=hv_x, hv_log_p=hv_log_p, this_theta_mask=None, skip_opt=True, verbose=False)
+                # get theta and e_alpha
+                tmp_theta = tmp_w / np.sum(tmp_w)
+                
+                # get non-zero cell types then refit; NOTE we set a min_theta in optimization to avoid theta as 0
+                # and before return result, we already set them back to 0
+                # binary theta by threshold to get a mask (1: present, 0: not present)
+                tmp_theta_mask = np.zeros(tmp_theta.shape, dtype='int')
+                tmp_theta_mask[tmp_theta > 0] = 1
+                
+                # refit
+                this_w = optimize_one_theta(this_mu.copy(), this_y_vec.copy(), N, this_warm_start_theta.copy(), this_warm_start_e_alpha, this_gamma_g, sigma2, this_spot_name, nu_vec=None, rho=None, lambda_r=None, lasso_weight_vec=None, lambda_l2=None, global_optimize=global_optimize, hybrid_version=hybrid_version, opt_method=opt_method, hv_x=hv_x, hv_log_p=hv_log_p, this_theta_mask=tmp_theta_mask, skip_opt=True, verbose=False)
+                # get theta and e_alpha
+                this_e_alpha_result = np.sum(this_w)
+                this_theta_result = this_w / this_e_alpha_result
+                
         
         else:
             # directly run optimization with specified lambda_r
@@ -357,35 +453,36 @@ def fit_stage1_spotwise_lambda_r(data, warm_start_theta, warm_start_e_alpha, gam
             # get theta and e_alpha
             tmp_theta = tmp_w / np.sum(tmp_w)
             
-        # get non-zero cell types then refit; NOTE we set a min_theta in optimization to avoid theta as 0
-        # and before return result, we already set them back to 0
-        # binary theta by threshold to get a mask (1: present, 0: not present)
-        tmp_theta_mask = np.zeros(tmp_theta.shape, dtype='int')
-        tmp_theta_mask[tmp_theta > 0] = 1
+            # get non-zero cell types then refit; NOTE we set a min_theta in optimization to avoid theta as 0
+            # and before return result, we already set them back to 0
+            # binary theta by threshold to get a mask (1: present, 0: not present)
+            tmp_theta_mask = np.zeros(tmp_theta.shape, dtype='int')
+            tmp_theta_mask[tmp_theta > 0] = 1
         
-        this_w = optimize_one_theta(this_mu.copy(), this_y_vec.copy(), N, this_warm_start_theta.copy(), this_warm_start_e_alpha, this_gamma_g, sigma2, this_spot_name, nu_vec=None, rho=None, lambda_r=None, lasso_weight_vec=None, lambda_l2=None, global_optimize=global_optimize, hybrid_version=hybrid_version, opt_method=opt_method, hv_x=hv_x, hv_log_p=hv_log_p, this_theta_mask=tmp_theta_mask, skip_opt=True, verbose=False)
-            
-        results.append(this_w.copy())
-       
+            this_w = optimize_one_theta(this_mu.copy(), this_y_vec.copy(), N, this_warm_start_theta.copy(), this_warm_start_e_alpha, this_gamma_g, sigma2, this_spot_name, nu_vec=None, rho=None, lambda_r=None, lasso_weight_vec=None, lambda_l2=None, global_optimize=global_optimize, hybrid_version=hybrid_version, opt_method=opt_method, hv_x=hv_x, hv_log_p=hv_log_p, this_theta_mask=tmp_theta_mask, skip_opt=True, verbose=False)
+            # get theta and e_alpha
+            this_e_alpha_result = np.sum(this_w)
+            this_theta_result = this_w / this_e_alpha_result
+        
+
+        # collect results from each spot
+        assert this_theta_result is not None
+        assert this_e_alpha_result is not None
+        theta_results.append(this_theta_result)
+        e_alpha_results.append(this_e_alpha_result)
     
     print('100%\n')
     
-    # collect results: theta and e_alpha
-    theta_results = np.zeros((n_spot, n_celltype, 1))
-    e_alpha_results = []
+    # change theta dimension back to 3D
+    theta_results_return = np.zeros((n_spot, n_celltype, 1))
     
-    for i, this_result in enumerate(results):
-        # extract theta and e_alpha
-        tmp_e_alpha = np.sum(this_result)
-        tmp_theta = this_result / tmp_e_alpha
-        # change dimension back
-        theta_results[i, :, :] = np.reshape(tmp_theta, (n_celltype, 1))
-        e_alpha_results.append(tmp_e_alpha)
+    for i, this_result in enumerate(theta_results):
+        theta_results_return[i, :, :] = np.reshape(theta_results[i], (n_celltype, 1))
     
     e_alpha_results = np.array(e_alpha_results)
     
-    if isinstance(lambda_r, list):
-        if diagnosis:
+    if strategy in ['BIC', 'AIC', 'CV']:
+        if isinstance(lambda_r, list) and diagnosis:
             # output optimal lambda_r
             import pandas as pd
             import os
@@ -399,9 +496,9 @@ def fit_stage1_spotwise_lambda_r(data, warm_start_theta, warm_start_e_alpha, gam
             
             # save optimal lambda_r histogram
             from diagnosis_plots import diagnosisParamsSpotwiseLambdarTuning
-            diagnosisParamsSpotwiseLambdarTuning(tmp_df['optimal_lambda_r'].to_list())
+            diagnosisParamsSpotwiseLambdarTuning(tmp_df['optimal_lambda_r'].to_list(), strategy)
     
-    return theta_results, e_alpha_results
+    return theta_results_return, e_alpha_results
 
 
 
@@ -513,9 +610,9 @@ def fit_model_two_stage(data, gamma_g=None, lambda_r=None, lambda_g=None, global
     elif isinstance(lambda_r, list):
         # we need tune hpyerparameter lambda_r
         if spotwise_lambda_r:
-            print('Start tuning spot-wise hyper-parameter for Adaptive Lasso for each spot separately: use BIC to find the optimal value from {len(lambda_r)} candidates...')
+            print(f'Start tuning spot-wise hyper-parameter for Adaptive Lasso for each spot separately: find the optimal value from {len(lambda_r)} candidates...')
             stage1_result = {}
-            stage1_result['theta'], stage1_result['e_alpha'] = fit_stage1_spotwise_lambda_r(data, theta.copy(), e_alpha.copy(), gamma_g.copy(), sigma2, lambda_r, lasso_weight.copy(), global_optimize=False, hybrid_version=hybrid_version, opt_method=opt_method, hv_x=z_hv, hv_log_p=log_p_hv, verbose=False, diagnosis=diagnosis)
+            stage1_result['theta'], stage1_result['e_alpha'] = fit_stage1_spotwise_lambda_r(data, theta.copy(), e_alpha.copy(), gamma_g.copy(), sigma2, lambda_r, lasso_weight.copy(), global_optimize=False, hybrid_version=hybrid_version, opt_method=opt_method, hv_x=z_hv, hv_log_p=log_p_hv, verbose=True, diagnosis=diagnosis)
         
         else:
         
