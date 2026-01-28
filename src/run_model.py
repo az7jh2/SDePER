@@ -167,5 +167,8 @@ def run_GLRM(data, lambda_r=None, lambda_g=None, estimate_gamma_g=True, n_jobs=1
             print(f'set small theta values<{threshold:.6f} to 0 and renorm remaining theta for spot {i:d}')
             result['theta'][i, tmp_ind] = 0
             result['theta'][i, :] = result['theta'][i, :] / np.sum(result['theta'][i, :])
+            
+    # add gamma_g result
+    result['gamma_g'] = gamma_g
     
     return result

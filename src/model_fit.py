@@ -115,7 +115,7 @@ def fit_base_model(data, gamma_g=None, global_optimize=False, hybrid_version=Tru
         print('calculate MLE theta and sigma^2 iteratively...')
     
     if verbose:
-        print(f'{"iter" : >6} | {"time_opt": >8} | {"time_sig": >8} | {"sigma2": >6}')
+        print(f'{"iter" : >6} | {"time_opt": >8} | {"time_sig": >8} | {"sigma2": >10}')
     
     t = 0
     pre_sigma2 = sigma2
@@ -139,9 +139,9 @@ def fit_base_model(data, gamma_g=None, global_optimize=False, hybrid_version=Tru
         time_sigma2 = time() - tmp_start_in_loop
     
         if verbose:
-            print(f'{t : >6} | {time_local_opt:8.3f} | {time_sigma2:8.3f} | {sigma2:6.3f}')
+            print(f'{t : >6} | {time_local_opt:8.3f} | {time_sigma2:8.3f} | {sigma2:10.6f}')
         
-        if abs(sigma2 - pre_sigma2) <= 1e-3:
+        if abs(sigma2 - pre_sigma2) <= 1e-6:
             break
         else:
             t += 1
@@ -593,7 +593,7 @@ def fit_model_two_stage(data, gamma_g=None, lambda_r=None, lambda_g=None, global
     
     print('\nStage 1: variable selection using Adaptive Lasso starts with the MLE theta and e^alpha, using already estimated sigma^2 and gamma_g...')
     
-    spotwise_lambda_r = True
+    spotwise_lambda_r = False
     if spotwise_lambda_r:
         print('\n[HIGHLIGHT] use spot-wise hyper-parameter lambda_r instead of an overall lambda_r value for all spots\n')
     
@@ -776,5 +776,8 @@ def fit_model_two_stage(data, gamma_g=None, lambda_r=None, lambda_g=None, global
     print(f'\nstage 2 finished. Elapsed time: {(time()-tmp_start_time)/60.0:.2f} minutes.\n')
     
     print(f'GLRM fitting finished. Elapsed time: {(time()-start_time)/60.0:.2f} minutes.\n')
+    
+    # add sigma2
+    result['sigma2'] = sigma2
     
     return result

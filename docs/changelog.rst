@@ -1,6 +1,28 @@
 Changelog
 =========
 
+Version 2.0.0 (2026-01-28)
+--------------------------
+
+This release represents a **major update** to SDePER, featuring substantial algorithmic improvements and optimization enhancements.
+
+**Updates**:
+
+* For optimization with graph Laplacian constraints, we transitioned from an ADMM-based framework to a gradient descent-based optimization strategy, as the ADMM approach was computationally expensive and inefficient for large-scale problems.
+
+* The adaptive lasso penalty has been revised to support spot-wise hyperparameters for penalty strength, instead of a single global hyperparameter shared across all spots. This functionality is currently under comprehensive testing and will be fully enabled in a later release.
+
+* The estimation precision of :math:`\sigma^2` has been improved from ``1e-2`` to ``1e-6``, leading to more accurate variance estimation.
+
+* In the two-stage optimization framework, if a hyperparameter is explicitly set to zero by the user in stage 1 (adaptive lasso for variable selection) or stage 2 (graph Laplacian constraint), the corresponding stage will now be skipped directly, rather than executing an additional optimization round without the penalty.
+
+* During cell type proportion :math:`\theta` estimation, a minimum boundary value of ``1e-9`` is introduced to ensure numerical stability during optimization. After optimization, boundary values are now reset to exactly zero to maintain sparsity.
+
+**Bug Fixes**:
+
+* In differential analysis for cell type-specific marker genes, the option :option:`--sortby_fc` set to ``true`` previously prioritized *p*-values before fold changes. This behavior has been corrected so that results are now properly sorted by fold change as intended.
+
+
 Version 1.7.1 (2025-10-08)
 --------------------------
 

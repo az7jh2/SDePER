@@ -76,7 +76,7 @@ min_theta = 1e-9
 """
 define a small value to make sure sigma^2 > 0
 """
-min_sigma2 = 1e-2
+min_sigma2 = 1e-6
 
 
 
