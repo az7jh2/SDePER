@@ -123,7 +123,7 @@ def calcHVBaseModelLoss(theta, e_alpha, y, mu, gamma_g, sigma2, hv_x, hv_log_p, 
 
 
 
-def cv_find_lambda_r(data, mle_theta, mle_e_alpha, gamma_g, sigma2, lasso_weight, candidate_list, hybrid_version=True, opt_method='L-BFGS-B', hv_x=None, hv_log_p=None, use_admm=False, use_likelihood=True, k=5, diagnosis=False, verbose=False):
+def cv_find_lambda_r(data, mle_theta, mle_e_alpha, gamma_g, sigma2, lasso_weight, candidate_list, hybrid_version=True, opt_method='L-BFGS-B', hv_x=None, hv_log_p=None, use_admm=False, use_likelihood=True, k=5, diagnosis=False, verbose=True):
     '''
     find optimal value for hyper-parameter lambda_r by k fold cross-validation
     
@@ -217,7 +217,8 @@ def cv_find_lambda_r(data, mle_theta, mle_e_alpha, gamma_g, sigma2, lasso_weight
     
     for t, lambda_r in enumerate(candidate_list):
         
-        #print(f'{t/len(candidate_list):.0%}...', end='')
+        if verbose:
+            print(f'{t/len(candidate_list):.0%}...', end='')
         
         this_rmse_list = []
         
@@ -300,9 +301,11 @@ def cv_find_lambda_r(data, mle_theta, mle_e_alpha, gamma_g, sigma2, lasso_weight
     
     if early_stop:
         optimal_idx = es_flag
-        #print('early stop')
+        if verbose:
+            print('early stop')
     else:
-        #print('100%')
+        if verbose:
+            print('100%')
         # find the optimal value with smallest average RMSE, only record the first occurence which corresponding to smaller lambda_r
         optimal_idx = avg_rmse_list.index(min(avg_rmse_list))
     
@@ -328,7 +331,7 @@ def cv_find_lambda_r(data, mle_theta, mle_e_alpha, gamma_g, sigma2, lasso_weight
     
     
     
-def cv_find_lambda_g(data, L, stage1_theta, stage1_e_alpha, theta_mask, gamma_g, sigma2, candidate_list, hybrid_version=True, opt_method='L-BFGS-B', hv_x=None, hv_log_p=None, use_admm=False, use_likelihood=True, k=5, diagnosis=False):
+def cv_find_lambda_g(data, L, stage1_theta, stage1_e_alpha, theta_mask, gamma_g, sigma2, candidate_list, hybrid_version=True, opt_method='L-BFGS-B', hv_x=None, hv_log_p=None, use_admm=False, use_likelihood=True, k=5, diagnosis=False, verbose=True):
     '''
     find optimal value for hyper-parameter lambda_g by k fold cross-validation
     
@@ -375,6 +378,8 @@ def cv_find_lambda_g(data, L, stage1_theta, stage1_e_alpha, theta_mask, gamma_g,
         the number of folds in cross-validation, The default value is 5.
     diagnosis : bool
         if True save more information to files for diagnosis CVAE and hyper-parameter selection
+    verbose : bool, optional
+        if True, print more information.
         
     Returns
     -------
@@ -382,12 +387,14 @@ def cv_find_lambda_g(data, L, stage1_theta, stage1_e_alpha, theta_mask, gamma_g,
         optimal lambda_g value
     '''
     
-    print('\nStart cross-validation for hyper-parameter lambda_g...')
+    if verbose:
+        print('\nStart cross-validation for hyper-parameter lambda_g...')
     
-    if use_admm:
-        print('still use ADMM even low speed')
-    else:
-        print('directly estimate theta by graph Laplacian loss function!')
+    if verbose:
+        if use_admm:
+            print('still use ADMM even low speed')
+        else:
+            print('directly estimate theta by graph Laplacian loss function!')
     
     
     start_time = time()
@@ -430,7 +437,8 @@ def cv_find_lambda_g(data, L, stage1_theta, stage1_e_alpha, theta_mask, gamma_g,
     
     for t, lambda_g in enumerate(candidate_list):
         
-        print(f'{t/len(candidate_list):.0%}...', end='')
+        if verbose:
+            print(f'{t/len(candidate_list):.0%}...', end='')
         
         # UPDATE: multiple the hyperparameter with Laplacian matrix get 𝜆L
         # note to use deep copy
@@ -526,16 +534,19 @@ def cv_find_lambda_g(data, L, stage1_theta, stage1_e_alpha, theta_mask, gamma_g,
     
     if early_stop:
         optimal_idx = es_flag
-        print('early stop')
+        if verbose:
+            print('early stop')
     else:
-        print('100%')
+        if verbose:
+            print('100%')
         # find the optimal value with smallest average RMSE, only record the first occurence which corresponding to smaller lambda_r
         optimal_idx = avg_rmse_list.index(min(avg_rmse_list))
     
-    if use_likelihood:
-        print(f'find optimal lambda_g {candidate_list[optimal_idx]:.3f} with average negative log-likelihood {avg_rmse_list[optimal_idx]:.4f} by {k} fold cross-validation. Elapsed time: {(time()-start_time)/60.0:.2f} minutes.')
-    else:
-        print(f'find optimal lambda_g {candidate_list[optimal_idx]:.3f} with average RMSE {avg_rmse_list[optimal_idx]:.4f} by {k} fold cross-validation. Elapsed time: {(time()-start_time)/60.0:.2f} minutes.')
+    if verbose:
+        if use_likelihood:
+            print(f'find optimal lambda_g {candidate_list[optimal_idx]:.3f} with average negative log-likelihood {avg_rmse_list[optimal_idx]:.4f} by {k} fold cross-validation. Elapsed time: {(time()-start_time)/60.0:.2f} minutes.')
+        else:
+            print(f'find optimal lambda_g {candidate_list[optimal_idx]:.3f} with average RMSE {avg_rmse_list[optimal_idx]:.4f} by {k} fold cross-validation. Elapsed time: {(time()-start_time)/60.0:.2f} minutes.')
         
     # draw plot
     if diagnosis:

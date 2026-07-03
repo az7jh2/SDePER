@@ -1,6 +1,23 @@
 Changelog
 =========
 
+Version 2.0.1 (2026-07-03)
+--------------------------
+
+**Updates**:
+
+* When :math:`\sigma^2` optimization fails, SDePER now prints a warning message instead of stopping with an error. In this situation, :math:`\sigma^2` is automatically reset to the minimum allowed value, ``1e-6``.
+
+* The default value of :option:`--n_marker_per_cmp` has been changed back from ``20`` to ``30``.
+
+* The default value of :option:`--n_hv_gene` has been increased from ``200`` to ``500``.
+
+
+**Bug Fixes**:
+
+* Forced `scanpy.read_csv()` to treat the first column as the row index when reading nUMI matrices, to ensure that spot/cell barcodes are correctly recognized as observation names rather than being incorrectly interpreted as an additional gene column.
+
+
 Version 2.0.0 (2026-01-28)
 --------------------------
 

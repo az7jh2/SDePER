@@ -218,11 +218,15 @@ Cell type marker identification options
 
    :Type: integer
 
-   :Default: ``20``
+   :Default: ``30``
 
    .. versionchanged:: 1.2.1
 
       Default value changed from 30 to 20.
+
+   .. versionchanged:: 2.0.1
+
+      Default value changed back from 20 to 30.
 
 
 .. option:: --use_fdr
@@ -331,11 +335,15 @@ CVAE-related options
 
    :Type: integer
 
-   :Default: ``200``
+   :Default: ``500``
 
    .. versionchanged:: 1.1.0
 
       Default value decreased from 1,000 to 200.
+
+   .. versionchanged:: 2.0.1
+
+      Default value increased from 200 to 500.
 
    .. note::
 

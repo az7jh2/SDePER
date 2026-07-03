@@ -108,7 +108,8 @@ def read_spatial_data(spatial_file, filter_gene, n_hv_gene=0):
     '''
     
     # Read spatial spot-level data
-    spatial_spot_obj = sc.read_csv(spatial_file)
+    # UPDATE: force scanpy to treat first column as row index
+    spatial_spot_obj = sc.read_csv(spatial_file, first_column_names=True)
     print(f'read spatial data from file {spatial_file}')
     print(f'total {spatial_spot_obj.n_obs} spots; {spatial_spot_obj.n_vars} genes\n')
     
@@ -189,16 +190,17 @@ def read_scRNA_data(ref_file, ref_anno_file, filter_cell, filter_gene):
     '''
     
     # Read scRNA cell-level data and cell-type annotation
-    scrna_obj = sc.read_csv(ref_file)
+    # UPDATE: force scanpy to treat first column as row index
+    scrna_obj = sc.read_csv(ref_file, first_column_names=True)
     print(f'read scRNA-seq data from file {ref_file}')
     print(f'total {scrna_obj.n_obs} cells; {scrna_obj.n_vars} genes')
     
     # check whether cell name and gene name are unique
     if len(set(scrna_obj.obs_names.tolist())) < scrna_obj.n_obs:
-        raise Exception('spot barcodes in spatial data are not unique!')
+        raise Exception('cell barcodes in scRNA-seq data are not unique!')
         
     if len(set(scrna_obj.var_names.tolist())) < scrna_obj.n_vars:
-        raise Exception('gene names in spatial data are not unique!')
+        raise Exception('gene names in scRNA-seq data are not unique!')
 
     scrna_celltype = pd.read_csv(ref_anno_file, index_col=0)
     print(f'read scRNA-seq cell-type annotation from file {ref_anno_file}')

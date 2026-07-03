@@ -150,7 +150,7 @@ def generate_log_heavytail_array(x, sigma):
     '''
     
     if not math.isfinite(sigma):
-        raise Exception('Error: sigma2 optimization in local model of all spots returns a non-finite value!')
+        raise Exception('[Error] sigma2 optimization in local model of all spots returns a non-finite value!')
     
     # change to N(0, 1)
     tmp_x = x / sigma
@@ -901,6 +901,9 @@ def update_sigma2(data, theta, e_alpha, gamma_g, sigma2, opt_method='L-BFGS-B', 
         
         this_sigma2 = sigma2[0]
         
+        if not math.isfinite(this_sigma2):
+            raise Exception(f'[Error] sigma2 optimization in local model of all spots returns a non-finite value {this_sigma2}!')
+        
         # update density values of heavy-tail with current sigma^2
         hv_log_p = generate_log_heavytail_array(hv_x, np.sqrt(this_sigma2))
         
@@ -946,21 +949,27 @@ def update_sigma2(data, theta, e_alpha, gamma_g, sigma2, opt_method='L-BFGS-B', 
     # the min value for clip sigma^2 should be larger
     bounds = ((min_sigma2, None),)
     
-    if global_optimize:
-        bounded_step = RandomDisplacementBounds(np.array([b[0] for b in bounds]), np.array([b[1] for b in bounds]))
-        # use the basin-hopping algorithm to find the global minimum
-        sol = basinhopping(objective_loss_sigma2, sigma2, niter=10, T=1.0, take_step=bounded_step,
-                           minimizer_kwargs={'method': opt_method,
-                                             'args': (data, theta, e_alpha, gamma_g, hv_x),
-                                             'bounds': bounds,
-                                             'options': {'maxiter': 250, 'eps': sigma2_eps}
-                                             },
-                           disp=False)
-    else:
-        sol = minimize(objective_loss_sigma2, sigma2, args=(data, theta, e_alpha, gamma_g, hv_x),
-                   method=opt_method,
-                   bounds=bounds, options={'disp': False, 'maxiter': 250, 'eps': sigma2_eps})
+    try:
+        if global_optimize:
+            bounded_step = RandomDisplacementBounds(np.array([b[0] for b in bounds]), np.array([b[1] for b in bounds]))
+            # use the basin-hopping algorithm to find the global minimum
+            sol = basinhopping(objective_loss_sigma2, sigma2, niter=10, T=1.0, take_step=bounded_step,
+                               minimizer_kwargs={'method': opt_method,
+                                                 'args': (data, theta, e_alpha, gamma_g, hv_x),
+                                                 'bounds': bounds,
+                                                 'options': {'maxiter': 250, 'eps': sigma2_eps}
+                                                },
+                               disp=False)
+
+        else:
+            sol = minimize(objective_loss_sigma2, sigma2, args=(data, theta, e_alpha, gamma_g, hv_x),
+                           method=opt_method,
+                           bounds=bounds, options={'disp': False, 'maxiter': 250, 'eps': sigma2_eps})
     
+    except Exception as e:
+        print(e)
+        print(f'reset sigma2 to minimum value {min_sigma2}')
+        return min_sigma2
     
     if not global_optimize:
         if not sol.success:
@@ -968,7 +977,13 @@ def update_sigma2(data, theta, e_alpha, gamma_g, sigma2, opt_method='L-BFGS-B', 
                 print(f'[WARNING] sigma2 optimization in local model of all spots not successful! Caused by: {sol.message}')
     
     if not math.isfinite(sol.x[0]):
-        raise Exception('[Error] sigma2 optimization in local model of all spots returns a non-finite value!')
+        if not sol.success:
+            print(f'[WARNING] sigma2 optimization in local model of all spots not successful! Caused by: {sol.message}')
+        else:
+            print(f'sigma2 optimization success {sol.success} with {sol.message}')
+        print(f'[Error] sigma2 optimization in local model of all spots returns a non-finite value {sol.x[0]}!')
+        print(f'reset sigma2 to minimum value {min_sigma2}')
+        return min_sigma2
         
     
     # the solution in x is a numpy array
