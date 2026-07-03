@@ -9,7 +9,7 @@ tensorflow-cpu==2.15.0
 scanpy==1.9.1
 scikit-misc==0.1.4
 seaborn==0.13.2
-umap-learn==0.5.3
+umap-learn==0.5.7
 distinctipy==1.2.2
 reportlab==4.1.0
 opencv-python-headless==4.9.0.80

@@ -42,7 +42,7 @@ requirements:
     - scipy ==1.11.4
     - seaborn ==0.13.2
     - tensorflow-base =2.15.0=cpu_*  # explicitly specify to use cpu version out from cpu_, cuda, eigen_, gpu_, or mkl_ in conda packages
-    - umap-learn ==0.5.3
+    - umap-learn ==0.5.7
     - libopencv =4.9.0=headless_* # install opencv in conda requires installing these 3 packages, headless version is used
     - opencv ==4.9.0
     - py-opencv ==4.9.0

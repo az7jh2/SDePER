@@ -84,6 +84,35 @@ def reparameterTheta(theta, e_alpha):
 
 
 
+def read_csv_file(path, **kwargs):
+    '''
+    read csv file, set both row index and column names as str for safe
+
+    Parameters
+    ----------
+    path : str
+        path of file to read
+
+    Returns
+    -------
+    df : dataframe
+        dataframe of the read content
+    '''
+    
+    df = pd.read_csv(
+        path,
+        index_col=0,
+        converters={0: str},
+        **kwargs,
+    )
+
+    df.index = df.index.astype(str)
+    df.columns = df.columns.astype(str)
+
+    return df
+
+
+
 def read_spatial_data(spatial_file, filter_gene, n_hv_gene=0):
     '''
     read spatial data saved as a CSV file by Scanpy
@@ -202,7 +231,7 @@ def read_scRNA_data(ref_file, ref_anno_file, filter_cell, filter_gene):
     if len(set(scrna_obj.var_names.tolist())) < scrna_obj.n_vars:
         raise Exception('gene names in scRNA-seq data are not unique!')
 
-    scrna_celltype = pd.read_csv(ref_anno_file, index_col=0)
+    scrna_celltype = read_csv_file(ref_anno_file)
     print(f'read scRNA-seq cell-type annotation from file {ref_anno_file}')
     print(f'total {len(set(scrna_celltype.iloc[:,0]))} cell-types')
     

@@ -26,6 +26,7 @@ from config import print, input_path, output_path, cur_version
 from time import time
 import copy
 import cv2
+from utils import read_csv_file
 
 
 
@@ -678,9 +679,9 @@ def do_imputation(loc_file, theta_file, spatial_file, grid_step=0.5, miss_spot_t
     '''
     
     # read files
-    df = pd.read_csv(loc_file, index_col=0)
-    theta = pd.read_csv(theta_file, index_col=0)
-    X = pd.read_csv(spatial_file, index_col=0)
+    df = read_csv_file(loc_file)
+    theta = read_csv_file(theta_file)
+    X = read_csv_file(spatial_file)
     
     # we check spot order here, note some spots may not have cell-type proportions
     # Find the intersection of the indices
@@ -935,7 +936,7 @@ def parseOpt():
     
     # check imputation
     # 2nd: whether original location of spatial spots provided by x and y coordinates
-    tmp_df = pd.read_csv(paramdict['loc_file'], index_col=0)
+    tmp_df = read_csv_file(paramdict['loc_file'])
     # whether column names are x and y
     if not ('x' in tmp_df.columns and 'y' in tmp_df.columns):
         raise Exception('ERROR: the column header of spot location csv file must be "x" and "y"!')
@@ -956,9 +957,9 @@ def parseOpt():
     # row order checking is skipped as some spot may not have corresponding cell-type proportions
     '''
     # check row index of spots whether consistent
-    tmp_count = pd.read_csv(paramdict['spatial_file'], index_col=0)
-    tmp_loc = pd.read_csv(paramdict['loc_file'], index_col=0)
-    tmp_prop = pd.read_csv(paramdict['prop_file'], index_col=0)
+    tmp_count = read_csv_file(paramdict['spatial_file'])
+    tmp_loc = read_csv_file(paramdict['loc_file'])
+    tmp_prop = read_csv_file(paramdict['prop_file'])
     
     assert (tmp_count.index==tmp_loc.index).all(), 'ERROR: order of spot barcode in gene expression and spot location not consistent!'
     assert (tmp_count.index==tmp_prop.index).all(), 'ERROR: order of spot barcode in gene expression and spot proportion not consistent!'

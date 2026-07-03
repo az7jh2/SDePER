@@ -1,6 +1,15 @@
 Changelog
 =========
 
+Version 2.0.2 (2026-07-03)
+--------------------------
+
+**Bug Fixes**:
+
+* Fixed an issue where numeric-looking row or column identifiers could be incorrectly converted from strings to integers when reading CSV files with pandas. All identifiers are now preserved as strings to prevent mismatches across input files.
+* Fixed a package source/dependency issue by updating umap-learn from 0.5.3 to 0.5.7 to avoid reliance on the deprecated pkg_resources module.
+
+
 Version 2.0.1 (2026-07-03)
 --------------------------
 

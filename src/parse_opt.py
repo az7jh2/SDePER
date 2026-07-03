@@ -15,7 +15,7 @@ from getopt import getopt
 import sys, os
 from config import print, input_path, diagnosis_path, cur_version
 import numpy as np
-import pandas as pd
+from utils import read_csv_file
 import copy
 
 
@@ -820,7 +820,7 @@ def parseOpt():
             paramdict['use_imputation'] = False
         else:
             # 2nd: whether original location of spatial spots provided by x and y coordinates
-            tmp_df = pd.read_csv(paramdict['loc_file'], index_col=0)
+            tmp_df = read_csv_file(paramdict['loc_file'])
             # whether column names are x and y
             if not ('x' in tmp_df.columns and 'y' in tmp_df.columns):
                 print('[WARNING] the column header of spot location csv file must be "x" and "y"! use_imputation will be reset to `False` since can not infer spot physical locations!')

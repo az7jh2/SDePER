@@ -24,7 +24,7 @@ this script stores functions related to pre-processing including:
 
 import pandas as pd
 from cvae import build_CVAE_whole
-from utils import read_spatial_data, run_DE_only
+from utils import read_spatial_data, run_DE_only, read_csv_file
 from config import print
 
 
@@ -137,7 +137,7 @@ def preprocess(spatial_file, ref_file, ref_anno_file, marker_file, A_file, use_c
         if marker_file is not None:
             # directly use provide marker gene expression
             # the default mangle_dupe_cols=True will handle the duplicated columns
-            marker_df = pd.read_csv(marker_file, index_col=0)
+            marker_df = read_csv_file(marker_file)
             print('user provided marker gene profile, DE will be skipped...\n')
             print(f'read {marker_df.shape[1]} marker genes from user specified marker gene file')
             
@@ -196,7 +196,7 @@ def preprocess(spatial_file, ref_file, ref_anno_file, marker_file, A_file, use_c
     if A_file is None:
         A_df = None
     else:
-        A_df = pd.read_csv(A_file, index_col=0)
+        A_df = read_csv_file(A_file)
         
     # filter spots based on sum of nUMI
     print('\nspot filtering before modeling...')
@@ -240,7 +240,7 @@ def preprocess(spatial_file, ref_file, ref_anno_file, marker_file, A_file, use_c
         if use_original_nUMI:
             print('[CAUTION] gene nUMI=0 determined by original spatial raw nUMI counts')
             # reload the spatial data, and find out genes with nUMI>0
-            non_zero_df = pd.concat(chunk.astype('Sparse[int]') for chunk in pd.read_csv(spatial_file, index_col=0, chunksize=1e4))
+            non_zero_df = pd.concat(chunk.astype('Sparse[int]') for chunk in read_csv_file(spatial_file, chunksize=1e4))
             non_zero_df = non_zero_df.loc[spatial_df.index, spatial_df.columns]
             non_zero_df = non_zero_df > 0
         else:
