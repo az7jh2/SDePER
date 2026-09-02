@@ -1,12 +1,27 @@
 Changelog
 =========
 
+Version 2.1.0 (2026-09-02)
+--------------------------
+
+**Updates**:
+
+This release mainly updates CVAE training:
+
+* Replaced sample-weight-based balancing with 1:1 balanced mini-batch training between scRNA-seq and spatial data.
+
+* Replaced learning-rate decay strategy with a learning-rate warm-up followed by cosine decay.
+
+* Changed the default value of :option:`--use_batch_norm` from ``true`` to ``false``.
+
+
 Version 2.0.2 (2026-07-03)
 --------------------------
 
 **Bug Fixes**:
 
 * Fixed an issue where numeric-looking row or column identifiers could be incorrectly converted from strings to integers when reading CSV files with pandas. All identifiers are now preserved as strings to prevent mismatches across input files.
+
 * Fixed a package source/dependency issue by updating umap-learn from 0.5.3 to 0.5.7 to avoid reliance on the deprecated pkg_resources module.
 
 

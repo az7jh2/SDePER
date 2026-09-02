@@ -35,8 +35,8 @@ jobs:
     strategy:
       fail-fast: false  # all job combinations will run to completion even if one of them fails
       matrix:  # uses a matrix strategy to run multiple test configurations across different operating systems and Python versions
-        os: ["ubuntu-latest"]
-        python-version: ["3.9.12", "3.10"]
+        os: ["ubuntu-24.04"]
+        python-version: ["3.9", "3.10"]
     steps:
       - uses: actions/checkout@v4
       
@@ -80,8 +80,13 @@ jobs:
 
       - uses: conda-incubator/setup-miniconda@v3  # create and activate an mostly-empty environment named test, containing only the latest `python-version` and its dependencies
         with:
-          auto-update-conda: true
+          miniconda-version: latest
+          activate-environment: test
           python-version: ${{ matrix.python-version }}
+          auto-update-conda: false
+          channels: conda-forge,bioconda
+          channel-priority: strict
+          show-channel-urls: true
 
       - name: Install SDePER package
         run: |
@@ -213,12 +218,17 @@ jobs:
 
       - uses: conda-incubator/setup-miniconda@v3  # create and activate an mostly-empty environment named test, containing only the latest `python-version` and its dependencies
         with:
-          auto-update-conda: true
+          miniconda-version: latest
+          activate-environment: test
           python-version: ${{ matrix.python-version }}
+          auto-update-conda: false
+          channels: conda-forge,bioconda
+          channel-priority: strict
+          show-channel-urls: true
 
       - name: Install SDePER package
         run: |
-          conda install -c bioconda -c conda-forge sdeper
+          conda install --override-channels -c bioconda -c conda-forge sdeper
           
       - name: Extract version number from tag  # note to create an environment variable for later reference
         run: |

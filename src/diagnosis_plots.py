@@ -63,10 +63,11 @@ def plotCVAELoss(history):
     plt.figure(figsize=(6.4*2, 4.8*2))
     
     # Training KL Loss
-    plt.plot(history.history['KL_loss'], color='#1f77b4', marker='o', label='Training KL Loss')
+    if 'weighted_KL_loss' in history.history:
+        plt.plot(history.history['weighted_KL_loss'], color='#1f77b4', marker='o', label='Weighted training KL Loss')
     # Validation KL Loss
-    if 'val_KL_loss' in history.history:
-        plt.plot(history.history['val_KL_loss'], color='#ff7f0e', marker='o', label='Validation KL Loss')
+    if 'val_weighted_KL_loss' in history.history:
+        plt.plot(history.history['val_weighted_KL_loss'], color='#ff7f0e', marker='o', label='Weighted validation KL Loss')
 
     # Training Reconstruction Loss
     plt.plot(history.history['reconstruction_loss'], color='#1f77b4', marker='s', linestyle='dashed', label='Training Reconstruction Loss')
@@ -335,7 +336,14 @@ def diagnosisCVAE(cvae, encoder, decoder, spatial_embed, spatial_transformed_df,
     # there is no way to add marker gene expression profile here, since the marker gene average expression is calculated on decoded values, it has no meaning even if we feed it to encoder
     # the order will affect the point overlay, first row draw first
     # umap has embeded seed (default 42), by specify random_state, umap will use special mode to keep reproducibility
-    all_umap = umap.UMAP(random_state=42).fit_transform(np.concatenate((pseudo_spot_embed, pseudo_spatial_embed, scRNA_embed, spatial_embed), axis=0))
+    
+    # UPDATE: if latent space dim is 2, directly use the coordinates
+    if pseudo_spot_embed.shape[1] == 2:
+        all_umap = np.concatenate((pseudo_spot_embed, pseudo_spatial_embed, scRNA_embed, spatial_embed), axis=0)
+        file_prefix = 'RAW'
+    else:
+        all_umap = umap.UMAP(random_state=42).fit_transform(np.concatenate((pseudo_spot_embed, pseudo_spatial_embed, scRNA_embed, spatial_embed), axis=0))
+        file_prefix = 'UMAP'
     
     # add cell/spot count in the annotation
     plot_df = pd.DataFrame({'UMAP1': all_umap[:, 0],
@@ -364,18 +372,20 @@ def diagnosisCVAE(cvae, encoder, decoder, spatial_embed, spatial_transformed_df,
     # relplot return a FacetGrid object
     # specify figure size by Height (in inches) of each facet, and Aspect ratio of each facet
     fgrid = sns.relplot(data=plot_df, x='UMAP1', y='UMAP2', hue='celltype', s=20, marker='o', palette=plot_colors, kind='scatter', col='dataset', col_order=['scRNA-seq', 'spatial'], height=4.8*2, aspect=6.4/4.8)
-    fgrid.set(xlabel='UMAP 1', ylabel='UMAP 2')
+    fgrid.set(xlabel=f'{file_prefix} 1', ylabel=f'{file_prefix} 2')
     # Put the legend out of the figure
     #ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
     
-    plt.savefig(os.path.join(diagnosis_path, 'CVAE_latent_space', 'UMAP_latent_mu_embedding_color_by_celltype.png'))
+    plt.savefig(os.path.join(diagnosis_path, 'CVAE_latent_space', f'{file_prefix}_latent_mu_embedding_color_by_celltype.png'))
     plt.close()
     
     
     # save UMAP coordinates of latent space
-    plot_df.loc[plot_df['datatype']=='spatial-spot', ['UMAP1', 'UMAP2']].to_csv(os.path.join(diagnosis_path, 'CVAE_latent_space', 'UMAP_coordinates_latent_mu_embedding_spatial_spots.csv.gz'), compression='gzip')
+    plot_df.loc[plot_df['datatype']=='spatial-spot', ['UMAP1', 'UMAP2']].to_csv(os.path.join(diagnosis_path, 'CVAE_latent_space', f'{file_prefix}_coordinates_latent_mu_embedding_spatial_spots.csv.gz'), compression='gzip')
     # save scRNA-seq cells UMAP coordinates
-    plot_df.loc[plot_df['datatype']=='scrna-cell', ['UMAP1', 'UMAP2']].to_csv(os.path.join(diagnosis_path, 'CVAE_latent_space', 'UMAP_coordinates_latent_mu_embedding_scRNA-seq_cells.csv.gz'), compression='gzip')
+    plot_df.loc[plot_df['datatype']=='scrna-cell', ['UMAP1', 'UMAP2']].to_csv(os.path.join(diagnosis_path, 'CVAE_latent_space', f'{file_prefix}_coordinates_latent_mu_embedding_scRNA-seq_cells.csv.gz'), compression='gzip')
+    # save scRNA-seq pesudo spots UMAP coordinates
+    plot_df.loc[plot_df['datatype']=='scrna-pseudo', ['UMAP1', 'UMAP2']].to_csv(os.path.join(diagnosis_path, 'CVAE_latent_space', f'{file_prefix}_coordinates_latent_mu_embedding_scRNA-seq_pseudospots.csv.gz'), compression='gzip')
     
     
     # NOTE: based on UMAP
@@ -395,8 +405,8 @@ def diagnosisCVAE(cvae, encoder, decoder, spatial_embed, spatial_transformed_df,
     tmp_df = plot_df.loc[plot_df['dataset']=='scRNA-seq']
     sc = ax1.scatter(tmp_df['UMAP1'], tmp_df['UMAP2'], c=tmp_df['n_cell_in_spot'], cmap='cubehelix', s=10, marker='o')
     ax1.set_title('dataset = scRNA-seq')
-    ax1.set_xlabel('UMAP 1')
-    ax1.set_ylabel('UMAP 2')
+    ax1.set_xlabel(f'{file_prefix} 1')
+    ax1.set_ylabel(f'{file_prefix} 2')
     
     # right panel: scatter plot of spatial spots + spatial pseudo-spots
     # first draw spatial pseudo-spots, which lay at the bottom
@@ -405,15 +415,15 @@ def diagnosisCVAE(cvae, encoder, decoder, spatial_embed, spatial_transformed_df,
     tmp_df = plot_df.loc[plot_df['datatype']=='spatial-spot']
     ax2.scatter(tmp_df['UMAP1'], tmp_df['UMAP2'], color=plot_colors[f'spatial ({spatial_embed.shape[0]})'], s=10, marker='o')
     ax2.set_title('dataset = spatial')
-    ax2.set_xlabel('UMAP 1')
-    ax2.set_ylabel('UMAP 2')
+    ax2.set_xlabel(f'{file_prefix} 1')
+    ax2.set_ylabel(f'{file_prefix} 2')
     
     # add colorbar with title to the most right (https://stackoverflow.com/questions/13784201/how-to-have-one-colorbar-for-all-subplots, conflict with tight_layout)
     cbar = fig.colorbar(sc, ax=ax2)
     cbar.ax.set_title('#cell in spot')
     
     fig.tight_layout()
-    fig.savefig(os.path.join(diagnosis_path, 'CVAE_latent_space', 'UMAP_latent_mu_embedding_color_by_num_cell_in_spot.png'))
+    fig.savefig(os.path.join(diagnosis_path, 'CVAE_latent_space', f'{file_prefix}_latent_mu_embedding_color_by_num_cell_in_spot.png'))
     plt.close()
     
     
@@ -429,7 +439,7 @@ def diagnosisCVAE(cvae, encoder, decoder, spatial_embed, spatial_transformed_df,
     assert (prop_df.index == plot_df.index).all()
     
     # save multiple figures into one PDF
-    with PdfPages(os.path.join(diagnosis_path, 'CVAE_latent_space', 'UMAP_latent_mu_embedding_color_by_celltype_proportion.pdf')) as pdf:
+    with PdfPages(os.path.join(diagnosis_path, 'CVAE_latent_space', f'{file_prefix}_latent_mu_embedding_color_by_celltype_proportion.pdf')) as pdf:
         for this_celltype in celltype_order:
         
             # start to plot
@@ -443,8 +453,8 @@ def diagnosisCVAE(cvae, encoder, decoder, spatial_embed, spatial_transformed_df,
             sc = ax1.scatter(tmp_df['UMAP1'], tmp_df['UMAP2'], c=tmp_df['proportion'], cmap='cubehelix', s=10, marker='o', norm=Normalize(vmin=0, vmax=1))
        
             ax1.set_title('dataset = scRNA-seq')
-            ax1.set_xlabel('UMAP 1')
-            ax1.set_ylabel('UMAP 2')
+            ax1.set_xlabel(f'{file_prefix} 1')
+            ax1.set_ylabel(f'{file_prefix} 2')
         
             # right panel: scatter plot of spatial spots + spatial pseudo-spots
             # we also interpolate the grid and draw a contour plot of cell type proportions in right panel
@@ -463,8 +473,8 @@ def diagnosisCVAE(cvae, encoder, decoder, spatial_embed, spatial_transformed_df,
             ax2.scatter(tmp_df['UMAP1'], tmp_df['UMAP2'], color=plot_colors[f'spatial ({spatial_embed.shape[0]})'], s=10, marker='o')
         
             ax2.set_title('dataset = spatial')
-            ax2.set_xlabel('UMAP 1')
-            ax2.set_ylabel('UMAP 2')
+            ax2.set_xlabel(f'{file_prefix} 1')
+            ax2.set_ylabel(f'{file_prefix} 2')
         
             # add colorbar with title
             cbar = fig.colorbar(sc, ax=ax2)
@@ -476,64 +486,6 @@ def diagnosisCVAE(cvae, encoder, decoder, spatial_embed, spatial_transformed_df,
             
             pdf.savefig(fig)  # Save the current figure to pdf
             plt.close(fig)  # Close the figure to free memory
-    
-    
-    # plot PCA of latent space of spatial spots and scRNA-seq cells plus pseudo spots
-    # the order will affect the point overlay, first row draw first
-    all_pca = PCA(n_components=2).fit_transform(np.concatenate((pseudo_spot_embed, pseudo_spatial_embed, scRNA_embed, spatial_embed), axis=0))
-    
-    # add cell/spot count in the annotation
-    plot_df = pd.DataFrame({'PC1': all_pca[:, 0],
-                            'PC2': all_pca[:, 1],
-                            'celltype': ['pseudo']*pseudo_spot_embed.shape[0] +
-                                        ['pseudo']*pseudo_spatial_embed.shape[0] + 
-                                        [f'{x} ({celltype_count_dict[x]})' for x in scRNA_celltype.celltype.to_list()] +
-                                        [f'spatial ({spatial_embed.shape[0]})']*spatial_embed.shape[0],
-                            'dataset': ['scRNA-seq']*pseudo_spot_embed.shape[0] +
-                                       ['spatial']*pseudo_spatial_embed.shape[0] +
-                                       ['scRNA-seq']*scRNA_embed.shape[0] +
-                                       ['spatial']*spatial_embed.shape[0],
-                            'datatype': ['scrna-pseudo']*pseudo_spot_embed.shape[0] +
-                                        ['spatial-pseudo']*pseudo_spatial_embed.shape[0] +
-                                        ['scrna-cell']*scRNA_embed.shape[0] +
-                                        ['spatial-spot']*spatial_embed.shape[0],
-                            },
-                           index = [f'scrna_pseudo{x}' for x in range(pseudo_spot_embed.shape[0])] +
-                                   [f'spatial_pseudo{x}' for x in range(pseudo_spatial_embed.shape[0])] +
-                                   scRNA_decode_df.index.to_list() +
-                                   spatial_transformed_df.index.to_list())
-    
-    # plot colors already defined
-    sns.set_style("darkgrid")
-    
-    # relplot return a FacetGrid object
-    # specify figure size by Height (in inches) of each facet, and Aspect ratio of each facet
-    fgrid = sns.relplot(data=plot_df, x='PC1', y='PC2', hue='celltype', s=20, marker='o', palette=plot_colors, kind='scatter', col='dataset', col_order=['scRNA-seq', 'spatial'], height=4.8*2, aspect=6.4/4.8)
-    fgrid.set(xlabel='PC 1', ylabel='PC 2')
-    # Put the legend out of the figure
-    #ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
-    
-    plt.savefig(os.path.join(diagnosis_path, 'CVAE_latent_space', 'PCA_latent_mu_embedding_color_by_celltype.png'))
-    plt.close()
-    
-    
-    # save PCA coordinates of latent space
-    plot_df.loc[plot_df['datatype']=='spatial-spot', ['PC1', 'PC2']].to_csv(os.path.join(diagnosis_path, 'CVAE_latent_space', 'PCA_coordinates_latent_mu_embedding_spatial_spots.csv.gz'), compression='gzip')
-    # save scRNA-seq cells PCA coordinates
-    plot_df.loc[plot_df['datatype']=='scrna-cell', ['PC1', 'PC2']].to_csv(os.path.join(diagnosis_path, 'CVAE_latent_space', 'PCA_coordinates_latent_mu_embedding_scRNA-seq_cells.csv.gz'), compression='gzip')
-    
-    
-    # Plot PCA density
-    # for safe to avoid program exit when density estimation failed
-    try:
-        plt.figure(figsize=(6.4*2, 4.8*2))
-        sns.set_style('whitegrid')
-        ax = sns.kdeplot(data=plot_df, x='PC1', y='PC2', fill=True)
-        ax.set(xlabel='PC 1', ylabel='PC 2')
-        plt.savefig(os.path.join(diagnosis_path, 'CVAE_latent_space', 'PCA_latent_mu_embedding_color_by_density.png'))
-        plt.close()
-    except:
-        pass
     
     
     # UMAP of decoded spatial and scRNA-seq cell gene expression
@@ -594,6 +546,68 @@ def diagnosisCVAE(cvae, encoder, decoder, spatial_embed, spatial_transformed_df,
     
     # also save UMAP coordinates
     plot_df[['UMAP1', 'UMAP2']].to_csv(os.path.join(diagnosis_path, 'CVAE_transformed_data', 'UMAP_coordinates_decoded_value.csv.gz'), compression='gzip')
+    
+    
+    # plot PCA of latent space of spatial spots and scRNA-seq cells plus pseudo spots
+    # the order will affect the point overlay, first row draw first
+    # UPDATE: if latent space dim is 2, directly use the coordinates; it has been plotted in UMAP section, then PCA plot can be skipped
+    if pseudo_spot_embed.shape[1] == 2:
+        return
+    
+    all_pca = PCA(n_components=2).fit_transform(np.concatenate((pseudo_spot_embed, pseudo_spatial_embed, scRNA_embed, spatial_embed), axis=0))
+    
+    # add cell/spot count in the annotation
+    plot_df = pd.DataFrame({'PC1': all_pca[:, 0],
+                            'PC2': all_pca[:, 1],
+                            'celltype': ['pseudo']*pseudo_spot_embed.shape[0] +
+                                        ['pseudo']*pseudo_spatial_embed.shape[0] + 
+                                        [f'{x} ({celltype_count_dict[x]})' for x in scRNA_celltype.celltype.to_list()] +
+                                        [f'spatial ({spatial_embed.shape[0]})']*spatial_embed.shape[0],
+                            'dataset': ['scRNA-seq']*pseudo_spot_embed.shape[0] +
+                                       ['spatial']*pseudo_spatial_embed.shape[0] +
+                                       ['scRNA-seq']*scRNA_embed.shape[0] +
+                                       ['spatial']*spatial_embed.shape[0],
+                            'datatype': ['scrna-pseudo']*pseudo_spot_embed.shape[0] +
+                                        ['spatial-pseudo']*pseudo_spatial_embed.shape[0] +
+                                        ['scrna-cell']*scRNA_embed.shape[0] +
+                                        ['spatial-spot']*spatial_embed.shape[0],
+                            },
+                           index = [f'scrna_pseudo{x}' for x in range(pseudo_spot_embed.shape[0])] +
+                                   [f'spatial_pseudo{x}' for x in range(pseudo_spatial_embed.shape[0])] +
+                                   scRNA_decode_df.index.to_list() +
+                                   spatial_transformed_df.index.to_list())
+    
+    # plot colors already defined
+    sns.set_style("darkgrid")
+    
+    # relplot return a FacetGrid object
+    # specify figure size by Height (in inches) of each facet, and Aspect ratio of each facet
+    fgrid = sns.relplot(data=plot_df, x='PC1', y='PC2', hue='celltype', s=20, marker='o', palette=plot_colors, kind='scatter', col='dataset', col_order=['scRNA-seq', 'spatial'], height=4.8*2, aspect=6.4/4.8)
+    fgrid.set(xlabel='PC 1', ylabel='PC 2')
+    # Put the legend out of the figure
+    #ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+    
+    plt.savefig(os.path.join(diagnosis_path, 'CVAE_latent_space', 'PCA_latent_mu_embedding_color_by_celltype.png'))
+    plt.close()
+    
+    
+    # save PCA coordinates of latent space
+    plot_df.loc[plot_df['datatype']=='spatial-spot', ['PC1', 'PC2']].to_csv(os.path.join(diagnosis_path, 'CVAE_latent_space', 'PCA_coordinates_latent_mu_embedding_spatial_spots.csv.gz'), compression='gzip')
+    # save scRNA-seq cells PCA coordinates
+    plot_df.loc[plot_df['datatype']=='scrna-cell', ['PC1', 'PC2']].to_csv(os.path.join(diagnosis_path, 'CVAE_latent_space', 'PCA_coordinates_latent_mu_embedding_scRNA-seq_cells.csv.gz'), compression='gzip')
+    
+    
+    # Plot PCA density
+    # for safe to avoid program exit when density estimation failed
+    try:
+        plt.figure(figsize=(6.4*2, 4.8*2))
+        sns.set_style('whitegrid')
+        ax = sns.kdeplot(data=plot_df, x='PC1', y='PC2', fill=True)
+        ax.set(xlabel='PC 1', ylabel='PC 2')
+        plt.savefig(os.path.join(diagnosis_path, 'CVAE_latent_space', 'PCA_latent_mu_embedding_color_by_density.png'))
+        plt.close()
+    except:
+        pass
 
 
 

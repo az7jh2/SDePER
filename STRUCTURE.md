@@ -46,3 +46,4 @@ All GitHub Action workflow files are in `.github/workflows/` folder.
 
 - `publish-to-pypi.yml`: publishing package to PyPI trigged by a new release in GitHub.
 - `test-installation.yml`: test SDePER when a new version is released.
+- `publish-docker_image.yml`: publishing docker image to Docker Hub when a new version is released

@@ -451,9 +451,13 @@ CVAE-related options
 
    :Type: boolean
 
-   :Default: ``true``
+   :Default: ``false``
 
    .. versionadded:: 1.2.1
+
+   .. versionchanged:: 2.1.0
+
+      Default value changed from true to false.
 
 
 .. option:: --cvae_train_epoch

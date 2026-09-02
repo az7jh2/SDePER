@@ -6,7 +6,6 @@ sphinx-rtd-theme
 numpy
 scipy
 pandas
-networkx
 matplotlib
 scikit-learn
 numba

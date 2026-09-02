@@ -15,9 +15,10 @@ from config import print, diagnosis_path
 import numpy as np
 import pandas as pd
 import umap
-from utils import read_spatial_data, read_scRNA_data, run_DE
+from utils import read_spatial_data, read_scRNA_data, run_DE, read_csv_file
 from time import time
 import random
+import math
 from sklearn.decomposition import PCA
 from sklearn.neighbors import NearestNeighbors
 from sklearn.preprocessing import MinMaxScaler
@@ -29,8 +30,9 @@ from tensorflow.keras.layers import Lambda, Input, Dense, Activation, concatenat
 from tensorflow.keras.layers import BatchNormalization
 from tensorflow.keras.models import Model
 from tensorflow.keras import optimizers
-from tensorflow.keras.callbacks import ReduceLROnPlateau, EarlyStopping
-from tensorflow.keras.utils import set_random_seed
+from tensorflow.keras.callbacks import EarlyStopping, Callback
+from tensorflow.keras.utils import set_random_seed, Sequence
+from tensorflow.keras.optimizers.schedules import CosineDecay
 
 # dealing with the keras symbolic tensor error
 from tensorflow.python.framework.ops import disable_eager_execution
@@ -419,7 +421,12 @@ def augment_sc(exp_df, celltype_anno, target_count, pseudo_spot_min_cell, pseudo
     # last X spots are used for validation, rest spots are used for training
     pseudo_spots_df = pd.concat(pseudo_spots, axis=1).transpose()
     pseudo_spots_df.reset_index(inplace=True, drop=True)
-    pseudo_spots_df.index = ['scrna_augment' + str(idx) for idx in pseudo_spots_df.index]
+    # UPDATE: add cell type name into index
+    assert pseudo_spots_df.shape[0] == len(celltype_stats)
+    pseudo_spots_df.index = [
+        f"scrna_augment{idx}_{suffix}"
+        for idx, suffix in zip(pseudo_spots_df.index, celltype_stats)
+        ]
     
     pseudo_spots_celltypes = pd.DataFrame(celltype_stats, columns=['celltype'], index=pseudo_spots_df.index)
     n_cell_df = pd.DataFrame(n_cell_in_spot, columns=['ncell'], index=pseudo_spots_df.index)
@@ -440,7 +447,7 @@ def augment_sc(exp_df, celltype_anno, target_count, pseudo_spot_min_cell, pseudo
 
 
 
-def CVAE_keras_model(p, p_cond, latent_dim, p_encoder_lst, p_decoder_lst, hidden_act='elu', output_act='relu', use_batch_norm=True, cvae_init_lr=0.01):
+def CVAE_keras_model(p, p_cond, latent_dim, p_encoder_lst, p_decoder_lst, optimizer, hidden_act='elu', output_act='relu', use_batch_norm=True):
     '''
     define a standard CVAE model based on Keras
     need to build a decoder separately as can not extract it from the whole model
@@ -457,14 +464,14 @@ def CVAE_keras_model(p, p_cond, latent_dim, p_encoder_lst, p_decoder_lst, hidden
         including number of nodes in each hidden layer of encoder, the length of list is the number of hidden layers
     p_decoder_lst : list of integers
         including number of nodes in each hidden layer of decoder, the length of list is the number of hidden layers
+    optimizer : Keras optimizer
+        now we directly build optimizer outside this function and pass it to the Keras model
     hidden_act : string, optional
         activation function of hidden layers. Default is elu function
     output_act : string, optional
         activation function of output layer. Default is relu function
     use_batch_norm : bool, optional
         whether to use batch normalization. Default if True, i.e. use batch normalization
-    cvae_init_lr : float
-        initial learning rate for training CVAE
     
     Returns
     -------
@@ -500,12 +507,20 @@ def CVAE_keras_model(p, p_cond, latent_dim, p_encoder_lst, p_decoder_lst, hidden
         kl_loss *= -0.5
         return kl_loss
     
-    def reconstruction_loss(obs, pred):
-        return K.sum(K.square(obs - pred), axis=-1)
+    # we set weight beta dependend on number of genes
+    beta = 1.0 / p
     
-    def vae_loss(obs, pred, C=1):
-        # currently we set weight C=1
-        return C*reconstruction_loss(obs, pred) + KL_loss(obs, pred)
+    def weighted_KL_loss(obs, pred):
+        return beta * KL_loss(obs, pred)
+    
+    
+    # NOTE Keras will automatically average over observations through Keras loss reduction.
+    def reconstruction_loss(obs, pred):
+        # UPDATE: mean over genes
+        return K.mean(K.square(obs - pred), axis=-1)
+    
+    def vae_loss(obs, pred):
+        return reconstruction_loss(obs, pred) + weighted_KL_loss(obs, pred)
     
     
     # Build encoder model
@@ -593,9 +608,8 @@ def CVAE_keras_model(p, p_cond, latent_dim, p_encoder_lst, p_decoder_lst, hidden
     # by using the Keras functional API, the variables will be created right away without needing to call .build(). When not using API, you can manually call `model.build()`
     cvae = Model([X, cond], decoder_output, name='cvae')
     
-    # Optimizer, use old optimizers in legacy namespace
-    adam = optimizers.legacy.Adam(learning_rate=cvae_init_lr, clipnorm=1.0, decay=0.0)
-    cvae.compile(optimizer=adam, loss=vae_loss, metrics=[reconstruction_loss, KL_loss], experimental_run_tf_function=True)
+    # Use passed in Optimizer
+    cvae.compile(optimizer=optimizer, loss=vae_loss, metrics=[reconstruction_loss, weighted_KL_loss], experimental_run_tf_function=True)
     
     
     # Subset the decoder (build another new decoder and re-store weights)
@@ -842,14 +856,159 @@ def build_CVAE(spatial_df, scRNA_df, scRNA_celltype, n_marker_per_cmp, n_pseudo_
         valid_scrna_data = scRNA_min_max_scaler.transform(valid_scrna_df)
     else:
         valid_scrna_data = valid_scrna_df.values
+        
+    
+    # UPDATE: use 1:1 balanced batch for training, rather than sample weights, which causing the loss calculation confusing
+    class BalancedTwoConditionCVAEGenerator(Sequence):
+        """
+        1:1 balanced batch generator for conditional autoencoder / CVAE.
+    
+        x0: condition 0 data, e.g. scRNA
+        x1: condition 1 data, e.g. spatial
+    
+        Each batch contains:
+            batch_size / 2 rows from x0
+            batch_size / 2 rows from x1
+    
+        Returns:
+            ([x_batch, label_batch], x_batch)
+    
+        This directly replaces sample_weight-based balancing.
+        """
+    
+        def __init__(
+            self,
+            x0,
+            x1,
+            batch_size=128,
+            label0=0,
+            label1=1,
+            label_shape="column",
+            shuffle=True,
+            seed=123,
+            oversample_smaller=True
+        ):
+            
+            self.x0 = x0
+            self.x1 = x1
+
+            assert isinstance(self.x0, np.ndarray)
+            assert isinstance(self.x1, np.ndarray)
+    
+            if self.x0.shape[1] != self.x1.shape[1]:
+                raise ValueError(
+                    f"x0 and x1 must have the same number of features. "
+                    f"Got x0={self.x0.shape[1]}, x1={self.x1.shape[1]}."
+                )
+
+            if self.x0.shape[0] == 0 or self.x1.shape[0] == 0:
+                raise ValueError("Both x0 and x1 must contain at least one row.")
+    
+            if batch_size % 2 != 0:
+                raise ValueError("batch_size must be even for 1:1 balanced batches.")
+    
+            if label_shape not in ["column", "vector"]:
+                raise ValueError("label_shape must be either 'column' or 'vector'.")
+    
+            self.n0 = self.x0.shape[0]
+            self.n1 = self.x1.shape[0]
+    
+            self.batch_size = batch_size
+            self.half_batch = batch_size // 2
+    
+            self.label0 = label0
+            self.label1 = label1
+            self.label_shape = label_shape
+    
+            self.shuffle = shuffle
+            self.seed = seed
+            self.rng = np.random.default_rng(seed)
+    
+            self.oversample_smaller = oversample_smaller
+    
+            self.on_epoch_end()
+    
+        def __len__(self):
+            if self.oversample_smaller:
+                # One epoch covers the larger condition once.
+                return math.ceil(max(self.n0, self.n1) / self.half_batch)
+            else:
+                # One epoch only uses the smaller condition once.
+                return math.floor(min(self.n0, self.n1) / self.half_batch)
+    
+        def _make_indices(self, n, target_n):
+            """
+            Make row indices of length target_n.
+    
+            If target_n > n, rows are repeated after reshuffling.
+            """
+            out = []
+    
+            while len(out) < target_n:
+                if self.shuffle:
+                    idx = self.rng.permutation(n)
+                else:
+                    idx = np.arange(n)
+    
+                out.extend(idx.tolist())
+    
+            return np.asarray(out[:target_n], dtype=np.int64)
+    
+        def on_epoch_end(self):
+            steps = len(self)
+            target_per_condition = steps * self.half_batch
+    
+            if self.oversample_smaller:
+                self.idx0 = self._make_indices(self.n0, target_per_condition)
+                self.idx1 = self._make_indices(self.n1, target_per_condition)
+            else:
+                if self.shuffle:
+                    self.idx0 = self.rng.permutation(self.n0)[:target_per_condition]
+                    self.idx1 = self.rng.permutation(self.n1)[:target_per_condition]
+                else:
+                    self.idx0 = np.arange(self.n0)[:target_per_condition]
+                    self.idx1 = np.arange(self.n1)[:target_per_condition]
+    
+        def __getitem__(self, batch_idx):
+            start = batch_idx * self.half_batch
+            end = start + self.half_batch
+    
+            batch_idx0 = self.idx0[start:end]
+            batch_idx1 = self.idx1[start:end]
+    
+            x0_batch = self.x0[batch_idx0]
+            x1_batch = self.x1[batch_idx1]
+    
+            x_batch = np.concatenate([x0_batch, x1_batch], axis=0)
+    
+            label_batch = np.concatenate([
+                np.full(x0_batch.shape[0], self.label0),
+                np.full(x1_batch.shape[0], self.label1)
+            ]).astype(np.float32)
+    
+            if self.label_shape == "column":
+                label_batch = label_batch.reshape(-1, 1)
+            
+            # Shuffle inside batch so model does not always see first half as one condition.
+            if self.shuffle:
+                 perm = self.rng.permutation(x_batch.shape[0])
+                 x_batch = x_batch[perm]
+                 label_batch = label_batch[perm]
+    
+            return [x_batch, label_batch], x_batch
     
     
-    # first spatial pseudo-spots then spatial spots then scRNA-seq pseudo-spots and scRNA-seq cells in data
-    # we also consider whether to duplicate spatial data since they are few
-    # update: use training sample weights
-    data = np.vstack((train_spatial_data, train_scrna_data))
-    labels = np.array([input_max]*train_spatial_data.shape[0] + [0.]*train_scrna_data.shape[0])
-    labels = labels.reshape((len(labels), 1))
+    train_gen = BalancedTwoConditionCVAEGenerator(
+        x0=train_scrna_data,
+        x1=train_spatial_data,
+        batch_size=256,
+        label0=0,
+        label1=input_max,
+        label_shape="column",  # the labels need to be 2D n*1 shape; scRNA as 0, spatial as 1
+        shuffle=True,
+        seed=123,
+        oversample_smaller=True
+    )
     
     # validation data
     valid_data = np.vstack((valid_spatial_data, valid_scrna_data))
@@ -857,51 +1016,69 @@ def build_CVAE(spatial_df, scRNA_df, scRNA_celltype, n_marker_per_cmp, n_pseudo_
     valid_labels = valid_labels.reshape((len(valid_labels), 1))
     
     
-    # training sample weights
-    weight_pseudo_scrna = np.ones((n_train_pseudo_scrna,))
-    weight_cell_scrna = np.ones((n_train_scrna_cell,))
-    weight_pseudo_spatial = np.ones((n_train_pseudo_spatial,))
-    weight_spot_spatial = np.ones((spatial_df.shape[0],))
-    
-    # weight sum of scRNA-seq cells : sum of scRNA pseudo spots = 1 : 1
-    # always decrease the weights for cohort with more samples
-    if n_train_pseudo_scrna > 0:
-        if n_train_pseudo_scrna > n_train_scrna_cell:
-            weight_pseudo_scrna *= n_train_scrna_cell / n_train_pseudo_scrna
-        elif n_train_pseudo_scrna < n_train_scrna_cell:
-            weight_cell_scrna *= n_train_pseudo_scrna / n_train_scrna_cell
-            
-    # weight sum of spatial spots : sum of spatial pseudo spots = 1 : 1
-    # always decrease the weights for cohort with more samples
-    if n_train_pseudo_spatial > 0:
-        if n_train_pseudo_spatial > spatial_df.shape[0]:
-            weight_pseudo_spatial *= spatial_df.shape[0] / n_train_pseudo_spatial
-        elif n_train_pseudo_spatial < spatial_df.shape[0]:
-            weight_spot_spatial *= n_train_pseudo_spatial / spatial_df.shape[0]
-    
-    # Final Balancing, re-weight spatial data to make sure the sum of spatial : sum of scRNA-seq = 1 : 1
-    # since we have already adjusted the weights, here we can not rely on sample size any more, use the sum of weight instead
-    # always decrease the weights for cohort with more samples
-    if (np.sum(weight_pseudo_scrna)+np.sum(weight_cell_scrna)) < (np.sum(weight_pseudo_spatial)+np.sum(weight_spot_spatial)):
-        # calculate factor beforehand to avoid update in weight causing factor change
-        tmp_factor = (np.sum(weight_pseudo_scrna)+np.sum(weight_cell_scrna)) / (np.sum(weight_pseudo_spatial)+np.sum(weight_spot_spatial))
-        weight_pseudo_spatial *= tmp_factor
-        weight_spot_spatial *= tmp_factor
-    elif (np.sum(weight_pseudo_scrna)+np.sum(weight_cell_scrna)) > (np.sum(weight_pseudo_spatial)+np.sum(weight_spot_spatial)):
-        tmp_factor = (np.sum(weight_pseudo_spatial)+np.sum(weight_spot_spatial)) / (np.sum(weight_pseudo_scrna)+np.sum(weight_cell_scrna))
-        weight_pseudo_scrna *= tmp_factor
-        weight_cell_scrna *= tmp_factor
-    
-    sample_weight = np.concatenate([weight_pseudo_spatial, weight_spot_spatial,
-                                    weight_pseudo_scrna, weight_cell_scrna])
-    
-    del train_spatial_data, valid_spatial_data, train_scrna_data, valid_scrna_data
+    del valid_spatial_data, valid_scrna_data
     del train_spatial_df, valid_spatial_df, train_scrna_df, valid_scrna_df
+    
+    
+    # UPDATE: Learning-rate schedule: warmup + Cosine learning rate decay
+    # Epochs 0–3:      initial_lr → peak_lr
+    # Epochs 3–203:    peak_lr → final_lr
+    # After epoch 203: remain at final_lr
+    steps_per_epoch = len(train_gen)
+
+    warmup_epochs = 3
+    decay_epochs = 200
+    
+    initial_lr = 1e-5
+    peak_lr = cvae_init_lr
+    final_lr = 5e-4
+    
+    assert cvae_init_lr >= final_lr, (
+        f"cvae_init_lr ({cvae_init_lr}) must be >= "
+        f"final learning rate ({final_lr})"
+    )
+    
+    lr_schedule = CosineDecay(
+        initial_learning_rate=initial_lr,
+        warmup_target=peak_lr,
+        warmup_steps=warmup_epochs * steps_per_epoch,
+        decay_steps=decay_epochs * steps_per_epoch,
+        alpha=final_lr / peak_lr,
+    )
+    # Optimizer, use old optimizers in legacy namespace
+    adam = optimizers.legacy.Adam(
+        learning_rate=lr_schedule,
+        global_clipnorm=1.0,
+    )
+    
+    # check learning rate at each step in training by logger, reports the learning rate after the final batch of the epoch
+    class LearningRateLogger(Callback):
+        """Add the end-of-epoch learning rate to Keras logs."""
+    
+        def __init__(self, lr_schedule):
+            super().__init__()
+            self.lr_schedule = lr_schedule
+    
+        def on_epoch_end(self, epoch, logs=None):
+            if logs is None:
+                return
+    
+            # Total number of optimizer updates completed
+            step = int(K.get_value(self.model.optimizer.iterations))
+    
+            # Learning rate corresponding to the current optimizer step
+            lr_tensor = self.lr_schedule(step)
+            lr_value = float(K.get_value(lr_tensor))
+    
+            # Store in history.history["lr"]
+            logs["lr"] = lr_value
+    
+    lr_logger = LearningRateLogger(lr_schedule)
     
     
     # Define CVAE
     # number of nodes in input layer (equals number of celltypes)
-    p = data.shape[1]
+    p = train_scrna_data.shape[1]
     # number of nodes in conditional node
     p_cond = 1
     # Hyper-parameters
@@ -913,49 +1090,40 @@ def build_CVAE(spatial_df, scRNA_df, scRNA_celltype, n_marker_per_cmp, n_pseudo_
     print(f'Encoder: {" - ".join([str(x) for x in ([p+p_cond] + hidden_dim[::-1] + [latent_dim])])}')
     print(f'Decoder: {" - ".join([str(x) for x in ([latent_dim+p_cond] + hidden_dim + [p])])}\n')
     
-    # note hidden layer in encoder is a reverse of the hidden_dim variable
-    cvae, new_decoder = CVAE_keras_model(p, p_cond, latent_dim, hidden_dim[::-1], hidden_dim, use_batch_norm=use_batch_norm, cvae_init_lr=cvae_init_lr)
     
-    # learning rate decay
-    lrate = ReduceLROnPlateau(monitor='val_loss', factor=0.9, patience=20, min_lr=5e-4, cooldown=10, verbose=False)
+    if input_max == 1:
+        output_act = 'sigmoid'
+    elif input_max > 1:
+        output_act = 'relu'
+    else:
+        raise Exception(f'[ERROR] invalid input scaler {input_max} for CVAE')
+    
+    # note hidden layer in encoder is a reverse of the hidden_dim variable
+    cvae, new_decoder = CVAE_keras_model(p, p_cond, latent_dim, hidden_dim[::-1], hidden_dim, optimizer=adam, use_batch_norm=use_batch_norm, output_act=output_act)
     
     # early stopping based on validation loss
-    early_stop = EarlyStopping(monitor='val_loss', min_delta=0, patience=40, restore_best_weights=True, verbose=False)
+    early_stop = EarlyStopping(monitor='val_loss', min_delta=1e-6, patience=40, restore_best_weights=True, verbose=False)
     
     
     # change tensorflow seed value, set the same seed value for sampling samples from latent space to decoder before training
     # still has unknown randomness source even set seed here...
     set_random_seed(1154)
     
-    # if not use Batch Normalization, we use all training data for one epoch
-    if use_batch_norm:
-        one_batch_size = 16384
-        do_shuffle = True
-    else:
-        one_batch_size = data.shape[0]
-        do_shuffle = False
-    
     # Train CVAE
     # note when there is no pseudo-spots, then there is no validation data
     if valid_data.shape[0] == 0:
         print('\nStart training without validation data...\n')
-        history_callback = cvae.fit([data, labels], data,
-                                epochs=cvae_train_epoch,
-                                batch_size=one_batch_size,
-                                shuffle=do_shuffle,
-                                callbacks=[lrate, early_stop],
-                                sample_weight=sample_weight,
-                                verbose=True)
+        history_callback = cvae.fit(train_gen,
+                                    epochs=cvae_train_epoch,
+                                    callbacks=[lr_logger],
+                                    verbose=True)
     else:
-         print('\nStart training...\n')
-         history_callback = cvae.fit([data, labels], data,
-                                validation_data=([valid_data, valid_labels], valid_data),
-                                epochs=cvae_train_epoch,
-                                batch_size=one_batch_size,
-                                shuffle=do_shuffle,
-                                callbacks=[lrate, early_stop],
-                                sample_weight=sample_weight,
-                                verbose=True)
+        print('\nStart training...\n')
+        history_callback = cvae.fit(train_gen,
+                                    validation_data=([valid_data, valid_labels], valid_data),
+                                    epochs=cvae_train_epoch,
+                                    callbacks=[lr_logger, early_stop],
+                                    verbose=True)
     
     n_epoch = len(history_callback.history['loss'])
     
@@ -972,8 +1140,8 @@ def build_CVAE(spatial_df, scRNA_df, scRNA_celltype, n_marker_per_cmp, n_pseudo_
 
     # postprocess the trained models
     # Subset the encoder
-    encoder = Model([cvae.get_layer('encoder_input').input, cvae.get_layer('cond_input').input],
-                    [cvae.get_layer('z_mean').output, cvae.get_layer('z_log_var').output],
+    encoder = Model(inputs=[cvae.get_layer('encoder_input').input, cvae.get_layer('cond_input').input],
+                    outputs=cvae.get_layer('z_mean').output,
                     name='encoder')
     
     # update layer weights for the decoder
@@ -991,7 +1159,7 @@ def build_CVAE(spatial_df, scRNA_df, scRNA_celltype, n_marker_per_cmp, n_pseudo_
     # note if log transform is applied, the data in spatial_df, pseudo_spatial_df, scRNA_df and pseudo_spots_df are already log transformed
     
     # Decoder output of transformed latent embedding of spatial spot-level data
-    spatial_embed = encoder.predict([spatial_min_max_scaler.transform(spatial_df), np.full((spatial_df.shape[0],1), input_max)])[0]
+    spatial_embed = encoder.predict([spatial_min_max_scaler.transform(spatial_df), np.full((spatial_df.shape[0],1), input_max)])
     
     tmp_output = new_decoder.predict([spatial_embed, np.full((spatial_embed.shape[0],1), 0)])
     
@@ -1009,7 +1177,7 @@ def build_CVAE(spatial_df, scRNA_df, scRNA_celltype, n_marker_per_cmp, n_pseudo_
     
     # Decoder output of average marker gene expression of scRNA-seq cell-types
     # NOTE: here we also include augmented single cells into downstream analysis, which affects the cell-type marker gene profile
-    scRNA_embed = encoder.predict([scRNA_min_max_scaler.transform(scRNA_df), np.full((scRNA_df.shape[0],1), 0)])[0]
+    scRNA_embed = encoder.predict([scRNA_min_max_scaler.transform(scRNA_df), np.full((scRNA_df.shape[0],1), 0)])
     
     # decode it
     tmp_output = new_decoder.predict([scRNA_embed, np.full((scRNA_embed.shape[0],1), 0)])
@@ -1043,7 +1211,7 @@ def build_CVAE(spatial_df, scRNA_df, scRNA_celltype, n_marker_per_cmp, n_pseudo_
     if n_pseudo_scrna == 0:
         pseudo_spot_embed = np.empty((0, scRNA_embed.shape[1]))
     else:
-        pseudo_spot_embed = encoder.predict([scRNA_min_max_scaler.transform(pseudo_spots_df), np.full((pseudo_spots_df.shape[0],1), 0)])[0]
+        pseudo_spot_embed = encoder.predict([scRNA_min_max_scaler.transform(pseudo_spots_df), np.full((pseudo_spots_df.shape[0],1), 0)])
     
     if do_initial_guess:
         use_embedding = 'none'
@@ -1071,7 +1239,7 @@ def build_CVAE(spatial_df, scRNA_df, scRNA_celltype, n_marker_per_cmp, n_pseudo_
         if n_pseudo_spatial == 0:
             pseudo_spatial_embed = np.empty((0, spatial_embed.shape[1]))
         else:
-            pseudo_spatial_embed = encoder.predict([spatial_min_max_scaler.transform(pseudo_spatial_df), np.full((pseudo_spatial_df.shape[0],1), input_max)])[0]
+            pseudo_spatial_embed = encoder.predict([spatial_min_max_scaler.transform(pseudo_spatial_df), np.full((pseudo_spatial_df.shape[0],1), input_max)])
         
         
         from diagnosis_plots import diagnosisCVAE
@@ -1202,7 +1370,7 @@ def build_CVAE_whole(spatial_file, ref_file, ref_anno_file, marker_file, n_hv_ge
         print('\nidentify cell-type marker genes...')
         if marker_file is not None:
             # directly use provide marker gene expression
-            marker_df = pd.read_csv(marker_file, index_col=0)
+            marker_df = read_csv_file(marker_file)
             print('user provided marker gene profile, DE will be skipped...\n')
             print(f'read {marker_df.shape[1]} marker genes from user specified marker gene file')
     
